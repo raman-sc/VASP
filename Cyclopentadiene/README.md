@@ -2,7 +2,7 @@
 
 Cyclopentadiene molecule has 11 atoms: C5H6. Thus, there are 33 modes (lowest three acoustic should be close to zero). Note that VASP prints the modes in the *decreasing* eigenvalue (frequency) order. In the current example, the lowest *four* modes are imaginary (probably due to the optimization issues), these will be skipped in the Raman calculation.
 
-For this example `vasp_raman.py` script version [**3004f2fd455b0f81c28a2e227542b328d5998bbd**](https://raw.github.com/raman-sc/VASP/3004f2fd455b0f81c28a2e227542b328d5998bbd/vasp_raman.py) was used.
+For this example `vasp_raman.py` script version [0.5.1] (https://raw.github.com/raman-sc/VASP/3cb3cdf0682609365c4b966472ef6eb5be1defc5/vasp_raman.py) was used.
 
 The following procedure can be used to obtain Raman activities for the G-point phonons. `POSCAR.phon` and `OUTCAR.phon` should come from a phonon calculation. `INCAR` should have `NWRITE=3` variable set.
 
