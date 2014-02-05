@@ -83,7 +83,12 @@ python27 vasp_raman.py > vasp_raman.out
 
 ```
 
-Submit all calculations using: `bash ./raman_sub.sh`. Three folders will be created where calculations will run: `Modes_01_10_2_0.01`, `Modes_11_20_2_0.01` and `Modes_21_29_2_0.01`.
+Submit all calculations using:
+```
+bash ./raman_sub.sh
+```
+
+Three folders will be created where calculations will run: `Modes_01_10_2_0.01`, `Modes_11_20_2_0.01` and `Modes_21_29_2_0.01`.
 
 After all calculations are done, it may be a good idea to save all `OUTCAR.*` files from all the `Modes_*` folders for the future reference. Also, `vasp_raman.dat` will contain Raman activities for the future processing (for example with `broaden.py`).
 
@@ -112,14 +117,15 @@ rm -f vasp_raman.unsorted
 ```
 
 Finally, broaden and plot Raman spectrum (scripts are in the archive):
+
 ```bash
-python broaden.py vasp_raman.dat
-bash vasp_raman.gnuplot.sh
+python ./broaden.py vasp_raman.dat
+bash ./vasp_raman.gnuplot.sh
 ```
 
 Enjoy your Raman spectrum in `Raman.ps`!
 
-[**Download complete example.**](Cyclopentadiene-Example.tar.gz)
+[**Download complete example.**](https://github.com/raman-sc/VASP/raw/master/Cyclopentadiene/Cyclopentadiene-vasp_raman-0.5.1.tar.gz)
 
 ## Contributors
 
