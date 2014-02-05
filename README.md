@@ -11,4 +11,4 @@ Continuous integration is coming!
 
 #### [0.5](https://raw.github.com/raman-sc/VASP/3004f2fd455b0f81c28a2e227542b328d5998bbd/vasp_raman.py)
 
-* Basic working functionality.
+* Basic working functionality
