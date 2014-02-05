@@ -1,12 +1,16 @@
 #!/usr/bin/env python
 #
+# vasp_raman.py v. 0.5.1
+#
 # Raman off-resonant activity calculator
 # using VASP as a back-end.
 #
 # Contributors: Alexandr Fonari  (Georgia Tech)
 #               Shannon Stauffer (UT Austin)
 #
-# MIT license, 2013
+# URL: http://raman-sc.github.io
+#
+# MIT license, 2013, 2014
 #
 def parse_poscar_header(inp_fh):
     import sys
@@ -133,13 +137,18 @@ if __name__ == '__main__':
     import optparse
     #
     print ""
+    print "    vasp_raman.py v. 0.5.1"
+    print ""
     print "    Raman off-resonant activity calculator,"
     print "    using VASP as a back-end."
     print ""
     print "    Contributors: Alexandr Fonari  (Georgia Tech)"
     print "                  Shannon Stauffer (UT Austin)"
-    print "    MIT License, 2013"
+    print ""
     print "    URL: http://raman-sc.github.io"
+    print ""
+    print "    MIT License, 2013"
+    print ""
     print "    Started at: "+datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
     print ""
     #
