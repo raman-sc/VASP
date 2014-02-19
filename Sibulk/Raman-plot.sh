@@ -11,6 +11,5 @@ set title "Off-resonance Raman: PAW @ PBE level\nSolid - Li1Si64-Td; Dashed - Si
 #set nokey
 set xlabel "Energy, cm^{-1}"
 #set ylabel "Intensity, a.u."
-#plot "spectLi1Si64.dat" u 1:2 w l ls 1 axes x1y1,  "spect.dat" u 1:2 w l ls 2 axes x1y2
-plot "Raman-data-a-pw91.out" u 1:2 w l ls 1,  "Raman-data-a-pw91.out" u 1:2 w l ls 2 
+plot "vasp_raman.dat-a-pw91.out" u 1:2 w l ls 1,  "Raman-data-a-pw91.out" u 1:2 w l ls 2 
 EOF

@@ -18,9 +18,11 @@ OUTCAR  (from DM VASP run, move to OUTCAR.phon after DM post-processing with dym
 INCAR.raman  (should contain LEPSILON=.TRUE. or LCALCEPS=.TRUE. because we want 'MACROSCOPIC STATIC  DIELECTRIC TENSOR' in the OUTCAR)
 KPOINTS
 POTCAR
-makemodes-dymmat.py
-VASP-Raman.py      (Older version, first given to me before Github, will be made consistent with new changes. ENV VARIABLE, VASP_RUN must be set)
-si_syst.sub  (A submission script that will run VASP_Raman.py through your desired queue sytem)
+vasp-raman.py      (edited from version 0.5.1)
+DMFDM.py        (support script to vasp_raman.py which parses Dynamical Matrix Finit-difference Method (DMFDM) output)
+raman_sub.sh        (changed to link DMFDM output files)
+raman.sub   
+collect.sh      
 
 ##Either
 aselite.py     (Can be downloaded with the vtstscripts package)
@@ -33,10 +35,9 @@ include freq.dat and modes_sqrt_amu.dat in your working directory
 
 With the post-processing of the DM VASP calculation complete, 
 
-# Run makemodes-dymmat.py which produces the files "freqs" which is used in the next script. This script assumes only the positive modes will be used and these entry numbers are listed on line 0.
-The order of these modes is from smallest to largest wavenumbers
+The order of these modes is from smallest to largest wavenumbers in the DMFDM freq.dat file
 
-# Submit raman.sub to run VASP-raman.py in the same directory.  This script will submit several VASP jobs on the alloted cores using VASP input files present in the directory
+Run raman_sub.sh to setup and exectute vasp_raman.py through local queueing system
 
 # The remaining steps are the same as in the CPD example
 
