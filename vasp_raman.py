@@ -1,12 +1,16 @@
 #!/usr/bin/env python
 #
+# vasp_raman.py v. 0.6.0
+#
 # Raman off-resonant activity calculator
 # using VASP as a back-end.
 #
-# Contributors: Alexandr Fonari  (Georgia Tech)
-#               Shannon Stauffer (UT Austin)
+# Contributors: Alexandr Fonari (Georgia Tech)
+# Shannon Stauffer (UT Austin)
 #
-# MIT license, 2013
+# URL: http://raman-sc.github.io
+#
+# MIT license, 2013, 2014
 #
 def parse_poscar_header(inp_fh):
     import sys
