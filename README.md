@@ -3,6 +3,7 @@
 Continuous integration is coming!
 
 ## Changelog
+#### [0.6
 
 #### [0.5.1](https://raw.github.com/raman-sc/VASP/3cb3cdf0682609365c4b966472ef6eb5be1defc5/vasp_raman.py)
 

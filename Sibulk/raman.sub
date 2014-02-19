@@ -1,0 +1,12 @@
+#!/bin/bash
+#
+#$ -cwd
+#$ -j y
+#$ -N Raman-MACtensor 
+#$ -m es
+#$ -V
+#$ -pe mpi8 8 
+#$ -o  $JOB_NAME.$JOB_ID
+#$ -S /bin/bash
+
+time python ./vasp_raman.py >vasp_raman.out
