@@ -47,7 +47,7 @@ After the job finished, a lot of `OUTCAR` files have been created (strictly spea
 
 ### Validation
 
-From experiment, Raman spectrum of the bulk silicon contain only one intense peak at around 520 cm-1 ([J.H. Parker, *et al.*, Phys Rev, 155, 712 (1967)](http://dx.doi.org/10.1103/PhysRev.155.712)), `vasp_raman.dat` contains:
+From experiment, Raman spectrum of the bulk silicon contains only one intense peak at around 520 cm-1 ([J.H. Parker, *et al.*, Phys Rev, 155, 712 (1967)](http://dx.doi.org/10.1103/PhysRev.155.712)), `vasp_raman.dat` contains:
 ```
 # mode    freq(cm-1)    alpha    beta2    activity
 1   504.47552   0.0000409  780.7952797  5465.5669580
@@ -72,7 +72,7 @@ From experiment, Raman spectrum of the bulk silicon contain only one intense pea
 20   145.81480   0.0000817   0.0000004   0.0000029
 21   145.81429   0.0000409   0.0000002   0.0000011
 ```
-Mode (triple degenerate) at 504 cm-1 has the largest intensity.
+Triple degenerate mode at 504 cm-1 has the largest intensity.
 
 [**Download complete example.**](https://github.com/raman-sc/VASP/raw/master/Sibulk-VASP/Sibulk-VASP-vasp_raman-0.5.1.tar.gz)
 
