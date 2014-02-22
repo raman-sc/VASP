@@ -12,43 +12,66 @@
 #
 # MIT license, 2013, 2014
 #
-def parse_poscar_header(inp_fh):
+
+def MAT_m_VEC(m, v):
+    p = [ 0.0 for i in range(len(v)) ]
+    for i in range(len(m)):
+        assert len(v) == len(m[i]), 'Length of the matrix row is not equal to the length of the vector'
+        p[i] = sum( [ m[i][j]*v[j] for j in range(len(v)) ] )
+    return p
+#
+def T(m):
+    p = [[ m[i][j] for i in range(len( m[j] )) ] for j in range(len( m )) ]
+    return p
+#
+# modified subroutine from phonopy 1.8.3 (New BSD license)
+def parse_poscar(poscar_fh):
     import sys
-    from math import sqrt
+    poscar_fh.seek(0) # just in case
+    lines = poscar_fh.readlines()
     #
-    inp_fh.seek(0) # just in case
-    poscar_header = ""
-    vol = 0.0
-    b = []
-    atom_numbers = []
-    #
-    inp_fh.readline() # skip title
-    scale = float(inp_fh.readline())
-    for i in range(3): b.append( [float(s) for s in inp_fh.readline().split()] )
-    #
-    if scale > 0.0:
-        b = [[ b[i][j]*scale for i in range(3)] for j in range(3) ]
-        scale = 1.0
-        #
-        vol = b[0][0]*b[1][1]*b[2][2] + b[1][0]*b[2][1]*b[0][2] + b[2][0]*b[0][1]*b[1][2] - \
-              b[0][2]*b[1][1]*b[2][0] - b[2][1]*b[1][2]*b[0][0] - b[2][2]*b[0][1]*b[1][0]
-    else:
+    scale = float(lines[1])
+    if scale < 0.0:
         print "[parse_poscar]: ERROR negative scale not implemented."
-        vol = scale
         sys.exit(1)
     #
-    atom_labels = inp_fh.readline() # yes, it is hardcoded for VASP5
-    atom_numbers = [int(s) for s in inp_fh.readline().split()]
-    nat = sum(atom_numbers)
+    b = []
+    for i in range(2, 5):
+        b.append([float(x)*scale for x in lines[i].split()[:3]])
     #
-    poscar_header += "%15.12f\n" % scale
-    poscar_header += "%15.12f %15.12f %15.12f\n" % (b[0][0], b[0][1], b[0][2])
-    poscar_header += "%15.12f %15.12f %15.12f\n" % (b[1][0], b[1][1], b[1][2])
-    poscar_header += "%15.12f %15.12f %15.12f\n" % (b[2][0], b[2][1], b[2][2])
-    poscar_header += atom_labels
-    poscar_header += " ".join(str(x) for x in atom_numbers)+"\n"
+    vol = b[0][0]*b[1][1]*b[2][2] + b[1][0]*b[2][1]*b[0][2] + b[2][0]*b[0][1]*b[1][2] - \
+          b[0][2]*b[1][1]*b[2][0] - b[2][1]*b[1][2]*b[0][0] - b[2][2]*b[0][1]*b[1][0]
     #
-    return nat, vol, b, poscar_header
+    try:
+        num_atoms = [int(x) for x in lines[5].split()]
+        line_at = 6
+    except ValueError:
+        symbols = [x for x in lines[5].split()]
+        num_atoms = [int(x) for x in lines[6].split()]
+        line_at = 7
+    nat = sum(num_atoms)
+    #
+    if lines[line_at][0].lower() == 's':
+        line_at += 1
+    #
+    is_scaled = True
+    if (lines[line_at][0].lower() == 'c' or
+        lines[line_at][0].lower() == 'k'):
+        is_scaled = False
+    #
+    line_at += 1
+    #
+    positions = []
+    for i in range(line_at, line_at + nat):
+        pos = [float(x) for x in lines[i].split()[:3]]
+        #
+        if is_scaled:
+            pos = MAT_m_VEC(T(b), pos)
+        #
+        positions.append(pos)
+    #
+    poscar_header = ''.join(lines[1:line_at-1]) # will add title and 'Cartesian' later
+    return nat, vol, b, positions, poscar_header
 #
 def parse_env_params(params):
     import sys
@@ -62,6 +85,38 @@ def parse_env_params(params):
     #
     return first, last, nderiv, step_size
 #
+#### subs for the output from VTST tools
+def parse_freqdat(freqdat_fh, nat):
+    freqdat_fh.seek(0) # just in case
+    #
+    eigvals = [ 0.0 for i in range(nat*3) ]
+    #
+    for i in range(nat*3): # all frequencies should be supplied, regardless of requested to calculate
+        tmp = freqdat_fh.readline().split()
+        eigvals[i] = float(tmp[0])
+    #
+    return eigvals
+#
+def parse_modesdat(modesdat_fh, nat):
+    from math import sqrt
+    modesdat_fh.seek(0) # just in case
+    #
+    eigvecs = [ 0.0 for i in range(nat*3) ]
+    norms =   [ 0.0 for i in range(nat*3) ]
+    #
+    for i in range(nat*3): # all frequencies should be supplied, regardless of requested to calculate
+        eigvec = []
+        for j in range(nat):
+            tmp = modesdat_fh.readline().split()
+            eigvec.append([ float(tmp[x]) for x in range(3) ])
+        #
+        modesdat_fh.readline().split() # empty line
+        eigvecs[i] = eigvec
+        norms[i] = sqrt( sum( [abs(x)**2 for sublist in eigvec for x in sublist] ) )
+    #
+    return eigvecs, norms
+#### end subs for VTST
+#
 def get_modes_from_OUTCAR(outcar_fh, nat):
     import sys
     import re
@@ -69,7 +124,6 @@ def get_modes_from_OUTCAR(outcar_fh, nat):
     eigvals = [ 0.0 for i in range(nat*3) ]
     eigvecs = [ 0.0 for i in range(nat*3) ]
     norms   = [ 0.0 for i in range(nat*3) ]
-    pos     = [ 0.0 for i in range(nat) ]
     #
     outcar_fh.seek(0) # just in case
     while True:
@@ -93,14 +147,13 @@ def get_modes_from_OUTCAR(outcar_fh, nat):
                 #
                 for j in range(nat):
                     tmp = outcar_fh.readline().split()
-                    if i == 0: pos[j] = [ float(tmp[x]) for x in range(3) ] # get atomic positions only once
                     #
                     eigvec.append([ float(tmp[x]) for x in range(3,6) ])
                     #
                 eigvecs[i] = eigvec
                 norms[i] = sqrt( sum( [abs(x)**2 for sublist in eigvec for x in sublist] ) )
             #
-            return pos, eigvals, eigvecs, norms
+            return eigvals, eigvecs, norms
         #
     print "[get_modes_from_OUTCAR]: ERROR Couldn't find 'Eigenvectors after division by SQRT(mass)' in OUTCAR. Use 'NWRITE=3' in INCAR. Exiting..."
     sys.exit(1)
@@ -191,45 +244,46 @@ if __name__ == '__main__':
         print "[__main__]: ERROR Couldn't open input file POSCAR.phon, exiting...\n"
         sys.exit(1)
     #
-    nat, vol, b, poscar_header = parse_poscar_header(poscar_fh)
-#### IF FD-DM calculation:  get pos from POSCAR --> convert to CART if nec ##
-#### NEEDED BEFORE CLOSING POSCAR
-    if os.path.isfile('freq.dat'):
-    	pos = DMFDM.parse_pos(poscar_fh, nat, b)
-    poscar_fh.close()
+    # nat, vol, b, poscar_header = parse_poscar_header(poscar_fh)
+    nat, vol, b, pos, poscar_header = parse_poscar(poscar_fh)
+    print pos
+    #print poscar_header
+    #sys.exit(0)
     #
-#### OPEN freq.dat and modes_sqrt_amu.dat to read eigvals, eigvecs, norms
-    if os.path.isfile('freq.dat'):
-    	try:
-            inp_eval = open('freq.dat', 'r')          
+    # either use modes from vtst tools or VASP
+    if os.path.isfile('freq.dat') or os.path.isfile('modes_sqrt_amu.dat'):
+        try:
+            freqdat_fh = open('freq.dat', 'r')
         except IOError:
-            print "[__main__]: ERROR Couldn't open freq.dat,  exiting...\n"
+            print "[__main__]: ERROR Couldn't open freq.dat, exiting...\n"
             sys.exit(1)
-        eigvals = DMFDM.parse_eval(inp_eval, nat)
-        inp_eval.close()
-
+        #
+        eigvals = parse_freqdat(freqdat_fh, nat)
+        freqdat_fh.close()
+        #
         try: 
-            inp_evec = open('modes_sqrt_amu.dat' , 'r')
+            modes_fh = open('modes_sqrt_amu.dat' , 'r')
         except IOError:
-            print "[__main__]: ERROR Couldn't open modes_sqrt_amu.dat,  exiting...\n"
+            print "[__main__]: ERROR Couldn't open modes_sqrt_amu.dat, exiting...\n"
             sys.exit(1)
-        eigvecs, norms = DMFDM.parse_evec(inp_evec, nat)
-
-
-#### OPEN OUTCAR.PHON from VASP PHONON CALC
-
-    if os.path.isfile('OUTCAR.phon'):
+        #
+        eigvecs, norms = parse_modesdat(modes_fh, nat)
+        modes_fh.close()
+    #
+    elif os.path.isfile('OUTCAR.phon'):
         try:
             outcar_fh = open('OUTCAR.phon', 'r')
         except IOError:
             print "[__main__]: ERROR Couldn't open OUTCAR.phon, exiting...\n"
             sys.exit(1)
-    #
-        pos, eigvals, eigvecs, norms = get_modes_from_OUTCAR(outcar_fh, nat)
+        #
+        eigvals, eigvecs, norms = get_modes_from_OUTCAR(outcar_fh, nat)
         outcar_fh.close()
     #
-
-
+    else:
+        print "[__main__]: Neither OUTCAR.phon nor freq.dat/modes_sqrt_amu.dat were found, nothing to do, exiting..."
+        sys.exit(1)
+    #
     output_fh = open('vasp_raman.dat', 'w')
     output_fh.write("# mode    freq(cm-1)    alpha    beta2    activity\n")
     for i in range(first-1, last):
@@ -300,7 +354,7 @@ if __name__ == '__main__':
         beta2 = ( (ra[0][0] - ra[1][1])**2 + (ra[0][0] - ra[2][2])**2 + (ra[1][1] - ra[2][2])**2 + 6.0 * (ra[0][1]**2 + ra[0][2]**2 + ra[1][2]**2) )/2.0
         print ""
         print "! %4i  freq: %10.5f  alpha: %10.7f  beta2: %10.7f  activity: %10.7f " % (i+1, eigval, alpha, beta2, 45.0*alpha**2 + 7.0*beta2)
-        output_fh.write("%i  %10.5f  %10.7f  %10.7f  %10.7f\n" % (i+1, eigval, alpha, beta2, 45.0*alpha**2 + 7.0*beta2))
+        output_fh.write("%03i  %10.5f  %10.7f  %10.7f  %10.7f\n" % (i+1, eigval, alpha, beta2, 45.0*alpha**2 + 7.0*beta2))
         output_fh.flush()
     #
     output_fh.close()
