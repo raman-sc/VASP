@@ -1,8 +1,12 @@
-## Bulk silicon example
+# WORK in PROGRESS
+
+## Bulk silicon example using phonons from VTST tools
+
+This example requires VTST tools version XXX or higher, download [here](http://theory.cm.utexas.edu/vtsttools/downloads/).
 
 Unit cell parameters were taken from the [phonopy](http://phonopy.sourceforge.net) example folder. Silicon unit cell contains 8 atoms, thus 24 frequencies (phonons), three acoustic close to zero.
 
-For this example `vasp_raman.py` script version [0.5.1] (https://raw.github.com/raman-sc/VASP/3cb3cdf0682609365c4b966472ef6eb5be1defc5/vasp_raman.py) was used.
+For this example `vasp_raman.py` script version [XXX] (https://raw.github.com/raman-sc/VASP/3cb3cdf0682609365c4b966472ef6eb5be1defc5/vasp_raman.py) was used.
 
 Raman intensities for all modes will be computed in one go. For the multi-step procedure see [Cyclopentadiene example](https://github.com/raman-sc/VASP/tree/master/Cyclopentadiene).
 
@@ -10,8 +14,9 @@ Working directory should contain the following files (`FAT` file system has diff
 ```
 INCAR        - should contain LEPSILON=.TRUE. or LCALCEPS=.TRUE. because we want 'MACROSCOPIC STATIC DIELECTRIC TENSOR' in the OUTCAR
 KPOINTS      - just kpoints (soft link of the KPOINTS file from the PHONON folder, to prevent errors)
-OUTCAR.phon  - should contain 'Eigenvectors after division by SQRT(mass)' either from VASP (soft link of the OUTCAR file from the PHONON folder)
-POSCAR.phon  - VASP5 format is *required* (atomic symbols and numbers), at this point only positive scales are supported (soft link of the POSCAR file from the PHONON folder)
+freq.dat     - contains frequencies (soft link of the freq.dat file from the PHONON folder)
+modes_sqrt_amu.dat - contains eigenvectors/sqrt(mass in amu) (soft link of the modes_sqrt_amu.dat file from the PHONON folder)
+POSCAR.phon  - VASP4 or VASP5 format is supported, at this point only positive scales are supported (soft link of the POSCAR file from the PHONON folder)
 POTCAR       - `PAW_PBE Si 05Jan2001` PP (soft link to the POTCAR file from the PHONON folder)
 raman.sub    - shell script for the scheduler to *do the deed*
 ```
