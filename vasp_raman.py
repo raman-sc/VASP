@@ -188,7 +188,6 @@ if __name__ == '__main__':
     import time
     #import argparse
     import optparse
-    import DMFDM
     #
     print ""
     print "    Raman off-resonant activity calculator,"
