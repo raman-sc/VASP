@@ -22,7 +22,7 @@ raman.sub    - shell script for the scheduler to *do the deed*
 ```
 
 ### Obtaining phonons using vtst tools
-1. Run `dymselsph.pl` inn the `PHONON` folder to generate `DISPLACECAR`. Need to make sure that all atoms in the unit cell are found, in this case `8`:
+1. Run `dymselsph.pl` in the `PHONON` folder to generate `DISPLACECAR`. Need to make sure that all atoms in the unit cell are found, in this case `8`:
 ```bash
 perl ~/vtstscripts/dymselsph.pl POSCAR 8 3.87 0.001
 ----------------------------------------------------------------------
