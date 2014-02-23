@@ -250,7 +250,7 @@ if __name__ == '__main__':
     #sys.exit(0)
     #
     # either use modes from vtst tools or VASP
-    if os.path.isfile('freq.dat') or os.path.isfile('modes_sqrt_amu.dat'):
+    if os.path.isfile('freq.dat') and os.path.isfile('modes_sqrt_amu.dat'):
         try:
             freqdat_fh = open('freq.dat', 'r')
         except IOError:
