@@ -35,7 +35,7 @@ leading to 24 degrees of freedom selected.
 ----------------------------------------------------------------------
 ```
 
-Be sure to check the `INCAR` file for the correct `vtst` settings (http://theory.cm.utexas.edu/vtsttools/dynmat/):
+Be sure to check the `INCAR` file for the correct `vtst` settings ([http://theory.cm.utexas.edu/vtsttools/dynmat/](http://theory.cm.utexas.edu/vtsttools/dynmat/)):
 ```
 ! phonons
 ICHAIN = 1      ! Run the dynamical matrix code
