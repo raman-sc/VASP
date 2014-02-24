@@ -2,6 +2,12 @@
 
 Continuous integration is coming!
 
+## Theory
+
+In order to calculate off-resonance Raman activity of a mode, one needs to compute the derivative of the polarizability (or macroscopic dielectric tensor) with respect to that normal mode coordinate: `dP/dQ`. Thus, two ingredients are required:
+1. Phonons at G-point
+2. Macroscopic dielectric tensor
+
 ## Changelog
 
 #### 0.6 (will be released soon)
