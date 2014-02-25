@@ -1,6 +1,6 @@
 # vasp_raman.py
 
-Continuous integration is coming!
+Raman off-resonant activity calculator using VASP as a back-end.
 
 ## Theory
 
@@ -11,10 +11,19 @@ Thus, two ingredients are required:
  2. Macroscopic dielectric tensor
 
 ### Phonons at Γ-point
-In VASP, phonons at Γ-point can be computed either using finite displacements: `IBRION=5` or `IBRION=6`; or density functional perturbation theory (DFPT): `IBRION=7` or `IBRION=8`. Only finite displacements are available when hybrid functional is employed.
+In VASP, phonons at Γ-point can be computed either using either:
+
+ * finite displacements: `IBRION=5` or `IBRION=6`; or
+ * density functional perturbation theory (DFPT): `IBRION=7` or `IBRION=8`.
+
+Only finite displacements are available when hybrid functional is employed.
 
 ### Macroscopic dielectric tensor
-In VASP, macroscopic dielectric tensor can be computed using either DFPT: `LEPSILON=.TRUE.` or from frequency dependent dielectric matrix calculation: `LOPTICS=.TRUE.`. In the latter case, hybrids functionals could be employed.
+In VASP, macroscopic dielectric tensor can be computed using either:
+ * DFPT: `LEPSILON=.TRUE.`;
+ * or from frequency dependent dielectric matrix calculation: `LOPTICS=.TRUE.`.
+
+In the latter case, hybrids functionals could be employed.
 
 ## Changelog
 
