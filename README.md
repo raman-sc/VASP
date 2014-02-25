@@ -4,9 +4,17 @@ Continuous integration is coming!
 
 ## Theory
 
-In order to calculate off-resonance Raman activity of a mode, one needs to compute the derivative of the polarizability (or macroscopic dielectric tensor) with respect to that normal mode coordinate: `dP/dQ`. Thus, two ingredients are required:
-1. Phonons at G-point
-2. Macroscopic dielectric tensor
+In order to calculate off-resonance Raman activity of a mode, one needs to compute the derivative of the polarizability (or macroscopic dielectric tensor) with respect to that normal mode coordinate: `dP/dQ` (or `de/dQ`).  
+Thus, two ingredients are required:
+
+ 1. Phonons at Γ-point
+ 2. Macroscopic dielectric tensor
+
+### Phonons at Γ-point
+In VASP, phonons at Γ-point can be computed either using finite displacements: `IBRION=5` or `IBRION=6`; or density functional perturbation theory (DFPT): `IBRION=7` or `IBRION=8`. Only finite displacements are available when hybrid functional is employed.
+
+### Macroscopic dielectric tensor
+In VASP, macroscopic dielectric tensor can be computed using either DFPT: `LEPSILON=.TRUE.` or from frequency dependent dielectric matrix calculation: `LOPTICS=.TRUE.`. In the latter case, hybrids functionals could be employed.
 
 ## Changelog
 
