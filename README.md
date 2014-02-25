@@ -38,6 +38,10 @@ In the latter case, hybrids functionals could be employed.
 #### [0.5](https://raw.github.com/raman-sc/VASP/3004f2fd455b0f81c28a2e227542b328d5998bbd/vasp_raman.py)
 * Basic working functionality
 
+## Installation
+
+Python >= 2.6 is required. Just copy `vasp_raman.py` in the `$PATH` and run! No external dependencies.
+
 ## Contributors
 
 Alexandr Fonari (Georgia Tech, PIs: J.-L. Bredas/V. Coropceanu): [Email](mailto:alexandr.fonari[nospam]gatech.edu)  
