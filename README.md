@@ -11,7 +11,7 @@ Thus, two ingredients are required:
  2. Macroscopic dielectric tensor
 
 ### Phonons at Γ-point
-In VASP, phonons at Γ-point can be computed either using either:
+In VASP, phonons at Γ-point can be computed using either:
 
  * finite displacements: `IBRION=5` or `IBRION=6`; or
  * density functional perturbation theory (DFPT): `IBRION=7` or `IBRION=8`.
@@ -20,10 +20,22 @@ Only finite displacements are available when hybrid functional is employed.
 
 ### Macroscopic dielectric tensor
 In VASP, macroscopic dielectric tensor can be computed using either:
- * DFPT: `LEPSILON=.TRUE.`;
+ * DFPT: `LEPSILON=.TRUE.`; or
  * or from frequency dependent dielectric matrix calculation: `LOPTICS=.TRUE.`.
 
-In the latter case, hybrids functionals could be employed.
+In the latter case, hybrids functionals could be employed.  
+For a more formal description of the method see [D. Porezag, M.R. Pederson, PRB, 54, 7830 (1996)](http://dx.doi.org/10.1103/PhysRevB.54.7830).
+
+## Installation
+
+Python >= 2.6 is required. Just copy `vasp_raman.py` in the `$PATH` and run! No external dependencies.
+
+## Examples
+
+* [Raman activity spectrum for Si using VASP](https://github.com/raman-sc/VASP/tree/master/Sibulk-VASP)
+* [Raman activity spectrum for Si using VTST tools](https://github.com/raman-sc/VASP/tree/master/Sibulk-VTST)
+* [Raman activity spectrum for cyclopentadiene using VASP](https://github.com/raman-sc/VASP/tree/master/Cyclopentadiene)
+* [Raman activity spectrum for Si using VTST tools and PW91 functional](https://github.com/raman-sc/VASP/tree/master/Sibulk)
 
 ## Changelog
 
@@ -37,10 +49,6 @@ In the latter case, hybrids functionals could be employed.
 
 #### [0.5](https://raw.github.com/raman-sc/VASP/3004f2fd455b0f81c28a2e227542b328d5998bbd/vasp_raman.py)
 * Basic working functionality
-
-## Installation
-
-Python >= 2.6 is required. Just copy `vasp_raman.py` in the `$PATH` and run! No external dependencies.
 
 ## Contributors
 
