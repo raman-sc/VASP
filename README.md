@@ -20,7 +20,7 @@ Only finite displacements are available when hybrid functional is employed.
 
 ### Macroscopic dielectric tensor
 In VASP, macroscopic dielectric tensor can be computed using either:
- * DFPT: `LEPSILON=.TRUE.`; or
+ * DFPT: `LEPSILON=.TRUE.`
  * or from frequency dependent dielectric matrix calculation: `LOPTICS=.TRUE.`.
 
 In the latter case, hybrids functionals could be employed.  
@@ -29,6 +29,18 @@ For a more formal description of the method see [D. Porezag, M.R. Pederson, PRB,
 ## Installation
 
 Python >= 2.6 is required. Just copy `vasp_raman.py` in the `$PATH` and run! No external dependencies.
+
+## Global variables
+
+`vasp_raman.py` **requires** two environmental variables to be set:
+
+  - `VASP_RAMAN_PARAMS` is defined as `FIRST-MODE_LAST-MODE_NDERIV_STEPSIZE` where:
+      - `FIRST_MODE` - integer, first mode for which derivative of the polarizability is computed
+      - `LAST-MODE`  - integer, last mode for which derivative of the polarizability is computed
+      - `NDERIV`     - integer, scheme for finite difference, **currently** only value `2` is supported
+      - `STEPSIZE`   - float, step-size for finite difference, in Angstroms
+        
+    An example is `VASP_RAMAN_PARAMS=01_10_2_0.01`
 
 ## Examples
 
