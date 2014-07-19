@@ -40,12 +40,12 @@ Python >= 2.6 is required. Just copy `vasp_raman.py` in the `$PATH` and run! No 
       - `NDERIV`     - integer, scheme for finite difference, **currently** only value `2` is supported
       - `STEPSIZE`   - float, step-size for finite difference, in Angstroms
         
-    An example is `VASP_RAMAN_PARAMS=01_10_2_0.01`
+    Example: `VASP_RAMAN_PARAMS=01_10_2_0.01`
 
   - `VASP_RAMAN_RUN` the command to execute VASP (can contain MPI call):  
 Example: `VASP_RAMAN_RUN='aprun -B /u/afonari/vasp.5.3.2/vasp.5.3/vasp &> job.out'`
 
-Both variables should be `exported` (in Bash language) before running `vasp_raman.py`
+Both variables should be `exported` (in Bash language) before running `vasp_raman.py`.
 
 An example of PBS script is:
 ```
