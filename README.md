@@ -45,6 +45,28 @@ Python >= 2.6 is required. Just copy `vasp_raman.py` in the `$PATH` and run! No 
   - `VASP_RAMAN_RUN` the command to execute VASP (can contain MPI call):  
 Example: `VASP_RAMAN_RUN='aprun -B /u/afonari/vasp.5.3.2/vasp.5.3/vasp &> job.out'`
 
+Both variables should be `exported` (in Bash language) before running `vasp_raman.py`
+
+An example of PBS script is:
+```
+#!/bin/bash
+#PBS -l select=1:ncpus=32:mpiprocs=32
+#PBS -l walltime=01:00:00
+#PBS -q debug
+#PBS -j oe
+#PBS -N Example
+#PBS -V
+
+cd $PBS_O_WORKDIR
+
+ulimit -s unlimited  # remove limit on stack size
+
+export VASP_RAMAN_RUN='aprun -B /u/afonari/vasp.5.3.2/vasp.5.3/vasp &> job.out'
+export VASP_RAMAN_PARAMS='01_10_2_0.01'
+
+python27 vasp_raman.py > vasp_raman.out
+```
+
 ## Examples
 
 * [Raman activity spectrum for Si using VASP](https://github.com/raman-sc/VASP/tree/master/Sibulk-VASP)
