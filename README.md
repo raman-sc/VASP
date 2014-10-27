@@ -95,6 +95,10 @@ python27 vasp_raman.py > vasp_raman.out
 #### [0.5](https://raw.github.com/raman-sc/VASP/3004f2fd455b0f81c28a2e227542b328d5998bbd/vasp_raman.py)
 * Basic working functionality
 
+## How to cite
+
+Use [Bibtext](vasp_raman_py.bib) or [RIS](vasp_raman_py.ris) file for citation.
+
 ## Contributors
 
 Alexandr Fonari (Georgia Tech, PIs: J.-L. Bredas/V. Coropceanu): [Email](mailto:alexandr.fonari[nospam]gatech.edu)  
