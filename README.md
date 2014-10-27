@@ -2,7 +2,7 @@
 
 Raman off-resonant activity calculator using VASP as a back-end.
 
-### TOC
+## TOC
 
 [Theory](#theory)  
 [Installation](#installation)  
