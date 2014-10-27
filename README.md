@@ -99,7 +99,7 @@ python27 vasp_raman.py > vasp_raman.out
 
 ## How to cite
 
-Use [Bibtext](vasp_raman_py.bib) or [RIS](vasp_raman_py.ris) file for citation.
+Use [Bibtext](https://raw.githubusercontent.com/raman-sc/VASP/master/vasp_raman_py.bib) or [RIS](https://raw.githubusercontent.com/raman-sc/VASP/master/vasp_raman_py.ris) file for citation.
 
 ## Contributors
 
