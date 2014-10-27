@@ -2,13 +2,15 @@
 
 Raman off-resonant activity calculator using VASP as a back-end.
 
-**TOC**
+### TOC
 
- - [Theory](#theory)
- - [Installation](#installation)
- - [Global variables](#global-variables)
- - [Examples](#examples)
- - [Changelog](#changelog)
+[Theory](#theory)  
+[Installation](#installation)  
+[Global variables](#global-variables)  
+[Examples](#examples)  
+[Changelog](#changelog)  
+[How to cite](#how-to-cite)  
+[Contributors](#contributors)
 
 ## Theory
 
