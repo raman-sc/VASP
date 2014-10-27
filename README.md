@@ -2,6 +2,14 @@
 
 Raman off-resonant activity calculator using VASP as a back-end.
 
+**TOC**
+
+ - [Theory](#theory)
+ - [Installation](#installation)
+ - [Global variables](#global-variables)
+ - [Examples](#examples)
+ - [Changelog](#changelog)
+
 ## Theory
 
 In order to calculate off-resonance Raman activity of a mode, one needs to compute the derivative of the polarizability (or macroscopic dielectric tensor) with respect to that normal mode coordinate: `dP/dQ` (or `de/dQ`).  
