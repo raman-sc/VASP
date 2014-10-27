@@ -1,6 +1,8 @@
-TY  - GEN
+TY  - BOOK
 ID  - vasp_raman_py
 TI  - vasp_raman.py
+PB  - https://github.com/raman-sc/VASP/
 AU  - Fonari, A
 AU  - Stauffer, S
 PY  - 2013///
+ER -
