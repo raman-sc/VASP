@@ -58,7 +58,8 @@ Example: `VASP_RAMAN_RUN='aprun -B /u/afonari/vasp.5.3.2/vasp.5.3/vasp &> job.ou
 Both variables should be `exported` (in Bash language) before running `vasp_raman.py`.
 
 An example of PBS script:
-```
+
+```bash
 #!/bin/bash
 #PBS -l select=1:ncpus=32:mpiprocs=32
 #PBS -l walltime=01:00:00
