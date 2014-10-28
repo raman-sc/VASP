@@ -57,7 +57,7 @@ Example: `VASP_RAMAN_RUN='aprun -B /u/afonari/vasp.5.3.2/vasp.5.3/vasp &> job.ou
 
 Both variables should be `exported` (in Bash language) before running `vasp_raman.py`.
 
-An example of PBS script is:
+An example of PBS script:
 ```
 #!/bin/bash
 #PBS -l select=1:ncpus=32:mpiprocs=32
@@ -75,6 +75,25 @@ export VASP_RAMAN_RUN='aprun -B /u/afonari/vasp.5.3.2/vasp.5.3/vasp &> job.out'
 export VASP_RAMAN_PARAMS='01_10_2_0.01'
 
 python27 vasp_raman.py > vasp_raman.out
+```
+
+An example of bash script (in case no scheduler is installed):
+
+```bash
+#!/bin/bash
+
+# suggested by Ricardo Faccio, Universidad de la República, Montevideo, Uruguay
+
+# OpenMP variables
+#export OMP_NUM_THREADS=1
+#export MKL_NUM_THREADS=1
+
+# vasp_raman.py variables
+export VASP_RAMAN_RUN='mpirun -np 4 vasp5.3.5_par'
+export VASP_RAMAN_PARAMS='01_06_2_0.01'
+
+python /home/user/bin/vasp_raman.py > vasp_raman.out
+
 ```
 
 ## Examples
