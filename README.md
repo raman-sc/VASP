@@ -34,7 +34,7 @@ In VASP, macroscopic dielectric tensor can be computed using either:
  * or from frequency dependent dielectric matrix calculation: `LOPTICS=.TRUE.`.
 
 In the latter case, hybrids functionals could be employed.  
-For a more formal description of the method see [D. Porezag, M.R. Pederson, PRB, 54, 7830 (1996)](http://dx.doi.org/10.1103/PhysRevB.54.7830).
+For a more formal description of the method see [D. Porezag, M.R. Pederson, PRB, 54, 7830 (1996)](http://doi.org/10.1103/PhysRevB.54.7830).
 
 ## Installation
 
@@ -107,7 +107,7 @@ python /home/user/bin/vasp_raman.py > vasp_raman.out
 ## Changelog
 
 #### 0.6 (will be released soon)
-* ADDED: ability to use phonons obtained from the [vtst tools](theory.cm.utexas.edu/vtsttools/dynmat/)
+* ADDED: ability to use phonons obtained from the [vtst tools](http://theory.cm.utexas.edu/vtsttools/dymmat.html)
 * FIX: cleaned `POSCAR` parsing code
 
 #### [0.5.1](https://raw.github.com/raman-sc/VASP/3cb3cdf0682609365c4b966472ef6eb5be1defc5/vasp_raman.py)
