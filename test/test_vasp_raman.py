@@ -36,3 +36,12 @@ class VaspRamanTester(unittest.TestCase):
                     self.assertAlmostEqual(bref[i][j], b[i][j], 2)
 
             self.assertEqual(natref, len(positions))
+
+    def testParseEnvParams(self):
+        params = '1_2_3_-0.35'
+        ref = [1, 2, 3, -0.35]
+        self.assertSequenceEqual(ref, vasp_raman.parse_env_params(params))
+
+        params = '-1_5_30_21.35'
+        ref = [-1, 5, 30, 21.35]
+        self.assertSequenceEqual(ref, vasp_raman.parse_env_params(params))

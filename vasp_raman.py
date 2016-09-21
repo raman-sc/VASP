@@ -10,8 +10,13 @@
 #
 # URL: http://raman-sc.github.io
 #
-# MIT license, 2013, 2014
+# MIT license, 2013 - 2016
 #
+
+
+import re
+import sys
+
 
 def MAT_m_VEC(m, v):
     p = [ 0.0 for i in range(len(v)) ]
@@ -19,14 +24,16 @@ def MAT_m_VEC(m, v):
         assert len(v) == len(m[i]), 'Length of the matrix row is not equal to the length of the vector'
         p[i] = sum( [ m[i][j]*v[j] for j in range(len(v)) ] )
     return p
-#
+
+
 def T(m):
     p = [[ m[i][j] for i in range(len( m[j] )) ] for j in range(len( m )) ]
     return p
-#
-# modified subroutine from phonopy 1.8.3 (New BSD license)
+
+
 def parse_poscar(poscar_fh):
-    import sys
+    # modified subroutine from phonopy 1.8.3 (New BSD license)
+    #
     poscar_fh.seek(0) # just in case
     lines = poscar_fh.readlines()
     #
@@ -72,10 +79,9 @@ def parse_poscar(poscar_fh):
     #
     poscar_header = ''.join(lines[1:line_at-1]) # will add title and 'Cartesian' later
     return nat, vol, b, positions, poscar_header
-#
+
+
 def parse_env_params(params):
-    import sys
-    #
     tmp = params.strip().split('_')
     if len(tmp) != 4:
         print "[parse_env_params]: ERROR there should be exactly four parameters"
@@ -84,7 +90,8 @@ def parse_env_params(params):
     [first, last, nderiv, step_size] = [int(tmp[0]), int(tmp[1]), int(tmp[2]), float(tmp[3])]
     #
     return first, last, nderiv, step_size
-#
+
+
 #### subs for the output from VTST tools
 def parse_freqdat(freqdat_fh, nat):
     freqdat_fh.seek(0) # just in case
@@ -118,8 +125,6 @@ def parse_modesdat(modesdat_fh, nat):
 #### end subs for VTST
 #
 def get_modes_from_OUTCAR(outcar_fh, nat):
-    import sys
-    import re
     from math import sqrt
     eigvals = [ 0.0 for i in range(nat*3) ]
     eigvecs = [ 0.0 for i in range(nat*3) ]
@@ -159,8 +164,6 @@ def get_modes_from_OUTCAR(outcar_fh, nat):
     sys.exit(1)
 #
 def get_epsilon_from_OUTCAR(outcar_fh):
-    import re
-    import sys
     epsilon = []
     #
     outcar_fh.seek(0) # just in case
@@ -180,7 +183,6 @@ def get_epsilon_from_OUTCAR(outcar_fh):
     return 1
 #
 if __name__ == '__main__':
-    import sys
     from math import pi
     from shutil import move
     import os
