@@ -54,10 +54,10 @@ def parse_poscar(poscar_fh):
     if lines[line_at][0].lower() == 's':
         line_at += 1
     #
-    is_scaled = True
-    if (lines[line_at][0].lower() == 'c' or
-        lines[line_at][0].lower() == 'k'):
+    if (lines[line_at][0].lower() == 'c' or lines[line_at][0].lower() == 'k'):
         is_scaled = False
+    else:
+        is_scaled = True
     #
     line_at += 1
     #
