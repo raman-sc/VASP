@@ -106,7 +106,10 @@ python /home/user/bin/vasp_raman.py > vasp_raman.out
 
 ## Changelog
 
-#### 0.6 (will be released soon)
+#### Current
+* Switched Python 3
+
+#### [0.6.0](https://github.com/raman-sc/VASP/blob/0.6.0/vasp_raman.py)
 * ADDED: ability to use phonons obtained from the [vtst tools](http://theory.cm.utexas.edu/vtsttools/dymmat.html)
 * FIX: cleaned `POSCAR` parsing code
 

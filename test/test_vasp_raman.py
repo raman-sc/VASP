@@ -1,10 +1,11 @@
 # -*- coding: utf-8 -*-
 import os
-import time
 import unittest
 import vasp_raman
 
+
 class VaspRamanTester(unittest.TestCase):
+
     def testT(self):
         m = [[1, 2, 3], [4, 5, 6], [7, 8, 9]]
         mref = [[1, 4, 7], [2, 5, 8], [3, 6, 9]]
@@ -24,13 +25,15 @@ class VaspRamanTester(unittest.TestCase):
 
     def testParsePoscar(self):
         with open(os.path.join('test', 'POSCAR_1')) as poscar_fh:
-            nat, vol, b, positions, poscar_header = vasp_raman.parse_poscar(poscar_fh)
+            nat, vol, b, positions, poscar_header = vasp_raman.parse_poscar(
+                poscar_fh)
 
             natref = 92
             self.assertEqual(natref, nat)
             self.assertAlmostEqual(1188.44, vol, 2)
 
-            bref = [[5.808, 0.0, 0.0], [0.0, 8.198, 0.0], [-3.360, 0.0, 24.962]]
+            bref = [[5.808, 0.0, 0.0], [0.0, 8.198, 0.0],
+                    [-3.360, 0.0, 24.962]]
             for i in range(3):
                 for j in range(3):
                     self.assertAlmostEqual(bref[i][j], b[i][j], 2)
