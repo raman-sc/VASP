@@ -71,18 +71,23 @@ def parse_poscar(poscar_fh):
     #
     line_at += 1
     #
-    positions = []
+    positions, frozen = [], []
     for i in range(line_at, line_at + nat):
-        pos = [float(x) for x in lines[i].split()[:3]]
+        tmp = [x.strip() for x in lines[i].split()]
+        pos = [float(x) for x in tmp[:3]]
         #
         if is_scaled:
             pos = MAT_m_VEC(T(b), pos)
         #
         positions.append(pos)
+        #
+        is_frozen = len(tmp) == 6 and (tmp[3] == tmp[4] == tmp[5] == 'F')
+        frozen.append(is_frozen)
+        #
     #
-    poscar_header = ''.join(lines[1:line_at -
-                                  1])  # will add title and 'Cartesian' later
-    return nat, vol, b, positions, poscar_header
+    # will add title and 'Cartesian' later
+    poscar_header = ''.join(lines[1:line_at - 1])
+    return nat, vol, b, positions, frozen, poscar_header
 
 
 def parse_env_params(params):
@@ -250,11 +255,10 @@ if __name__ == '__main__':
         help='Use provided POSCAR in the folder, USE WITH CAUTION!!',
         action='store_true')
     (options, args) = parser.parse_args()
-    #args = vars(parser.parse_args())
     args = vars(options)
     #
     VASP_RAMAN_RUN = os.environ.get('VASP_RAMAN_RUN')
-    if VASP_RAMAN_RUN == None:
+    if not VASP_RAMAN_RUN:
         print("[__main__]: ERROR Set environment variable 'VASP_RAMAN_RUN'")
         print()
         parser.print_help()
@@ -262,7 +266,7 @@ if __name__ == '__main__':
     print("[__main__]: VASP_RAMAN_RUN='" + VASP_RAMAN_RUN + "'")
     #
     VASP_RAMAN_PARAMS = os.environ.get('VASP_RAMAN_PARAMS')
-    if VASP_RAMAN_PARAMS == None:
+    if not VASP_RAMAN_PARAMS:
         print("[__main__]: ERROR Set environment variable 'VASP_RAMAN_PARAMS'")
         print()
         parser.print_help()
@@ -286,11 +290,8 @@ if __name__ == '__main__':
         )
         sys.exit(1)
     #
-    # nat, vol, b, poscar_header = parse_poscar_header(poscar_fh)
-    nat, vol, b, pos, poscar_header = parse_poscar(poscar_fh)
+    nat, vol, b, pos, frozen, poscar_header = parse_poscar(poscar_fh)
     print(pos)
-    # print(poscar_header)
-    # sys.exit(0)
     #
     # either use modes from vtst tools or VASP
     if os.path.isfile('freq.dat') and os.path.isfile('modes_sqrt_amu.dat'):
@@ -346,6 +347,10 @@ if __name__ == '__main__':
             disp_filename = 'OUTCAR.%04d.%+d.out' % (i + 1, disps[j])
             #
             try:
+                if args['gen']:
+                    # Force IOError to skip to POSCAR generation
+                    raise IOError
+
                 outcar_fh = open(disp_filename, 'r')
                 print("[__main__]: File " + disp_filename +
                       " exists, parsing...")
@@ -359,11 +364,15 @@ if __name__ == '__main__':
                     poscar_fh.write("Cartesian\n")
                     #
                     for k in range(nat):
-                        pos_disp = [
-                            pos[k][l] +
+                        disp_val = [
                             eigvec[k][l] * step_size * disps[j] / norm
                             for l in range(3)
                         ]
+                        if frozen[k]:
+                            disp_val = [0.0, 0.0, 0.0]
+
+                        pos_disp = [pos[k][l] + disp_val[l] for l in range(3)]
+
                         poscar_fh.write(
                             '%15.10f %15.10f %15.10f\n' %
                             (pos_disp[0], pos_disp[1], pos_disp[2]))
@@ -378,13 +387,16 @@ if __name__ == '__main__':
                     print("[__main__]: '-gen' mode -> " + poscar_fn +
                           " with displaced atoms have been generated")
                     #
-                    if j + 1 == len(
-                            disps
-                    ):  # last iteration for the current displacements list
+                    # last iteration for the current displacements list
+                    if j + 1 == len(disps):
                         print(
                             "[__main__]: '-gen' mode -> POSCAR files with displaced atoms have been generated, exiting now"
                         )
                         sys.exit(0)
+
+                    # Continue to the next displacement
+                    continue
+
                 else:  # run VASP here
                     print("[__main__]: Running VASP...")
                     os.system(VASP_RAMAN_RUN)

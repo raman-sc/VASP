@@ -25,8 +25,8 @@ class VaspRamanTester(unittest.TestCase):
 
     def testParsePoscar(self):
         with open(os.path.join('test', 'POSCAR_1')) as poscar_fh:
-            nat, vol, b, positions, poscar_header = vasp_raman.parse_poscar(
-                poscar_fh)
+            nat, vol, b, positions, frozen, poscar_header = \
+                vasp_raman.parse_poscar(poscar_fh)
 
             natref = 92
             self.assertEqual(natref, nat)
@@ -39,6 +39,30 @@ class VaspRamanTester(unittest.TestCase):
                     self.assertAlmostEqual(bref[i][j], b[i][j], 2)
 
             self.assertEqual(natref, len(positions))
+            self.assertEqual(natref, len(frozen))
+            self.assertListEqual([False] * natref, frozen)
+
+    def testParsePoscarFrozen(self):
+        with open(os.path.join('test', 'POSCAR_2')) as poscar_fh:
+            nat, vol, b, positions, frozen, poscar_header = \
+                vasp_raman.parse_poscar(poscar_fh)
+
+            natref = 92
+            self.assertEqual(natref, nat)
+            self.assertAlmostEqual(1188.44, vol, 2)
+
+            bref = [[5.808, 0.0, 0.0], [0.0, 8.198, 0.0],
+                    [-3.360, 0.0, 24.962]]
+            for i in range(3):
+                for j in range(3):
+                    self.assertAlmostEqual(bref[i][j], b[i][j], 2)
+
+            self.assertEqual(natref, len(positions))
+            self.assertEqual(natref, len(frozen))
+
+            ref_frozen = [False] * natref
+            ref_frozen[1] = ref_frozen[5] = True
+            self.assertListEqual(ref_frozen, frozen)
 
     def testParseEnvParams(self):
         params = '1_2_3_-0.35'
