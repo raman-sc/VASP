@@ -291,7 +291,12 @@ if __name__ == '__main__':
         sys.exit(1)
     #
     nat, vol, b, pos, frozen, poscar_header = parse_poscar(poscar_fh)
-    print(pos)
+
+    print(f'Total atoms {nat}.')
+    if any(frozen):
+        frozen_str = ', '.join(map(str, (idx for idx, is_frozen
+                                   in enumerate(frozen) if is_frozen)))
+        print(f'Frozen atoms (0th-based): {frozen_str}.')
     #
     # either use modes from vtst tools or VASP
     if os.path.isfile('freq.dat') and os.path.isfile('modes_sqrt_amu.dat'):
