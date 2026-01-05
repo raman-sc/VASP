@@ -146,11 +146,13 @@ def parse_modesdat(modesdat_fh, nat):
 
 #### end subs for VTST
 #
-def get_modes_from_OUTCAR(outcar_fh, nat):
+def get_modes_from_OUTCAR(outcar_fh, nat, frozen):
     from math import sqrt
-    eigvals = [0.0 for i in range(nat * 3)]
-    eigvecs = [0.0 for i in range(nat * 3)]
-    norms = [0.0 for i in range(nat * 3)]
+    #
+    nfreq = 3 * (nat - sum(1 for x in frozen if x))
+    print(f'Expected number of modes (excluding frozen atoms): {nfreq}.')
+    #
+    eigvals, eigvecs, norms = [], [], []
     #
     outcar_fh.seek(0)  # just in case
     while True:
@@ -166,26 +168,29 @@ def get_modes_from_OUTCAR(outcar_fh, nat):
             )  # ----------------------------------------------------
             outcar_fh.readline()  # empty line
             #
-            for i in range(
-                    nat * 3
-            ):  # all frequencies should be supplied, regardless of those requested to calculate
+            for i in range(nfreq):
                 outcar_fh.readline()  # empty line
                 p = re.search(r'^\s*(\d+).+?([\.\d]+) cm-1',
                               outcar_fh.readline())
-                eigvals[i] = float(p.group(2))
                 #
-                outcar_fh.readline(
-                )  # X         Y         Z           dx          dy          dz
+                eigvals.append(float(p.group(2)))
+                #
+                # X         Y         Z           dx          dy          dz
+                outcar_fh.readline()
+                #
                 eigvec = []
-                #
                 for j in range(nat):
                     tmp = outcar_fh.readline().split()
                     #
                     eigvec.append([float(tmp[x]) for x in range(3, 6)])
                     #
-                eigvecs[i] = eigvec
-                norms[i] = sqrt(
+                eigvecs.append(eigvec)
+                #
+                norm = sqrt(
                     sum([abs(x)**2 for sublist in eigvec for x in sublist]))
+                norms.append(norm)
+            #
+            assert len(eigvals) == len(eigvecs) == len(norms)
             #
             return eigvals, eigvecs, norms
         #
@@ -195,7 +200,6 @@ def get_modes_from_OUTCAR(outcar_fh, nat):
     sys.exit(1)
 
 
-#
 def get_epsilon_from_OUTCAR(outcar_fh):
     epsilon = []
     #
@@ -294,8 +298,9 @@ if __name__ == '__main__':
 
     print(f'Total atoms {nat}.')
     if any(frozen):
-        frozen_str = ', '.join(map(str, (idx for idx, is_frozen
-                                   in enumerate(frozen) if is_frozen)))
+        frozen_str = ', '.join(
+            map(str,
+                (idx for idx, is_frozen in enumerate(frozen) if is_frozen)))
         print(f'Frozen atoms (0th-based): {frozen_str}.')
     #
     # either use modes from vtst tools or VASP
@@ -327,7 +332,7 @@ if __name__ == '__main__':
             print("[__main__]: ERROR Couldn't open OUTCAR.phon, exiting...\n")
             sys.exit(1)
         #
-        eigvals, eigvecs, norms = get_modes_from_OUTCAR(outcar_fh, nat)
+        eigvals, eigvecs, norms = get_modes_from_OUTCAR(outcar_fh, nat, frozen)
         outcar_fh.close()
     #
     else:
