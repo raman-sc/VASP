@@ -64,6 +64,20 @@ class VaspRamanTester(unittest.TestCase):
             ref_frozen[1] = ref_frozen[5] = True
             self.assertListEqual(ref_frozen, frozen)
 
+    def testPposcarHeaderSelectiveDynamics(self):
+
+        for poscar_fn, is_selective in zip(
+            ('POSCAR_1', 'POSCAR_2', 'POSCAR_3'), (False, False, True),
+                strict=True):
+
+            with open(os.path.join('test', poscar_fn)) as poscar_fh:
+                nat, vol, b, positions, frozen, poscar_header = \
+                    vasp_raman.parse_poscar(poscar_fh)
+
+            self.assertTrue(
+                vasp_raman.is_selective_dynamics(poscar_header) is is_selective
+            )
+
     def testParseEnvParams(self):
         params = '1_2_3_-0.35'
         ref = [1, 2, 3, -0.35]

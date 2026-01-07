@@ -90,6 +90,10 @@ def parse_poscar(poscar_fh):
     return nat, vol, b, positions, frozen, poscar_header
 
 
+def is_selective_dynamics(poscar_header):
+    return poscar_header.splitlines()[-1].lower().startswith('s')
+
+
 def parse_env_params(params):
     tmp = params.strip().split('_')
     if len(tmp) != 4:
@@ -372,21 +376,30 @@ if __name__ == '__main__':
                     poscar_fh.write("%s %4.1e \n" % (disp_filename, step_size))
                     poscar_fh.write(poscar_header)
                     poscar_fh.write("Cartesian\n")
+                    is_selective = is_selective_dynamics(poscar_header)
                     #
                     for k in range(nat):
+                        is_frozen = frozen[k]
+                        #
                         disp_val = [
                             eigvec[k][l] * step_size * disps[j] / norm
                             for l in range(3)
                         ]
-                        if frozen[k]:
+                        if is_frozen:
                             disp_val = [0.0, 0.0, 0.0]
-
+                        #
                         pos_disp = [pos[k][l] + disp_val[l] for l in range(3)]
-
+                        #
                         poscar_fh.write(
-                            '%15.10f %15.10f %15.10f\n' %
+                            '%15.10f %15.10f %15.10f' %
                             (pos_disp[0], pos_disp[1], pos_disp[2]))
-                        #print '%10.6f %10.6f %10.6f %10.6f %10.6f %10.6f' % (pos[k][0], pos[k][1], pos[k][2], dis[k][0], dis[k][1], dis[k][2])
+                        #
+                        if is_selective:
+                            is_frozen_str = ' F F F' if is_frozen else ' T T T'
+                        else:
+                            is_frozen_str = ''
+                        #
+                        poscar_fh.write(f'{is_frozen_str}\n')
                     poscar_fh.close()
                 else:
                     print("[__main__]: Using provided POSCAR")
