@@ -7,6 +7,7 @@ Raman off-resonant activity calculator using VASP as a back-end.
 [Theory](#theory)  
 [Installation](#installation)  
 [Global variables](#global-variables)  
+[External phonon inputs](#external-phonon-inputs)  
 [Examples](#examples)  
 [Changelog](#changelog)  
 [How to cite](#how-to-cite)  
@@ -38,11 +39,25 @@ For a more formal description of the method see [D. Porezag, M.R. Pederson, PRB,
 
 ## Installation
 
-Python >= 2.6 is required. Just copy `vasp_raman.py` in the `$PATH` and run! No external dependencies.
+Python 3.6 or later is required. Copy `vasp_raman.py` into a directory in `$PATH`, or run it directly from the repository.
+
+The original `OUTCAR.phon` and `freq.dat` / `modes_sqrt_amu.dat` routes use only the Python standard library.
+
+Additional requirements for the external phonon options are:
+
+- `--phonopy-qpoints` requires [PyYAML](https://pyyaml.org/);
+- `--ase-modes` reads a JSON file and does not require ASE at conversion time;
+- ASE is required if the vibration modes are generated using `ase.vibrations.Vibrations`.
+
+PyYAML and ASE can be installed using:
+
+```bash
+python3 -m pip install pyyaml ase
+```
 
 ## Global variables
 
-`vasp_raman.py` **requires** two environmental variables to be set:
+For Raman calculations, `vasp_raman.py` requires two environment variables to be set:
 
   - `VASP_RAMAN_PARAMS` is defined as `FIRST-MODE_LAST-MODE_NDERIV_STEPSIZE` where:
       - `FIRST_MODE` - integer, first mode for which derivative of the polarizability is computed
@@ -56,6 +71,9 @@ Python >= 2.6 is required. Just copy `vasp_raman.py` in the `$PATH` and run! No 
 Example: `VASP_RAMAN_RUN='aprun -B /u/afonari/vasp.5.3.2/vasp.5.3/vasp &> job.out'`
 
 Both variables should be `exported` (in Bash language) before running `vasp_raman.py`.
+The environment variables are not required when using
+`--write-external-modes` to convert Phonopy or ASE mode data without
+running a Raman calculation.
 
 An example of PBS script:
 
@@ -75,7 +93,7 @@ ulimit -s unlimited  # remove limit on stack size
 export VASP_RAMAN_RUN='aprun -B /u/afonari/vasp.5.3.2/vasp.5.3/vasp &> job.out'
 export VASP_RAMAN_PARAMS='01_10_2_0.01'
 
-python27 vasp_raman.py > vasp_raman.out
+python3 vasp_raman.py > vasp_raman.out
 ```
 
 An example of bash script (in case no scheduler is installed):
@@ -93,9 +111,223 @@ An example of bash script (in case no scheduler is installed):
 export VASP_RAMAN_RUN='mpirun -np 4 vasp5.3.5_par'
 export VASP_RAMAN_PARAMS='01_06_2_0.01'
 
-python /home/user/bin/vasp_raman.py > vasp_raman.out
+python3 /home/user/bin/vasp_raman.py > vasp_raman.out
 
 ```
+## External phonon inputs
+
+`vasp_raman.py` can read Γ-point vibrational modes from several sources:
+
+1. a Phonopy `qpoints.yaml` file;
+2. an ASE-generated JSON mode file;
+3. existing `freq.dat` and `modes_sqrt_amu.dat` files;
+4. the original VASP `OUTCAR.phon` file.
+
+Only one external source should be selected at a time.
+
+### General requirements
+
+The structure supplied with `--phonon-poscar` must have the same:
+
+- number of atoms;
+- atom ordering;
+- chemical symbols;
+- Cartesian coordinate convention
+
+as the external phonon calculation.
+
+For a structure containing `N` atoms, the external source must contain
+exactly `3N` modes.
+
+Unless `--keep-mode-order` is used, modes from Phonopy or ASE are sorted
+from highest to lowest frequency.
+
+### Phonopy input
+
+The first q-point in the Phonopy file must be Γ:
+
+```text
+[0, 0, 0]
+```
+
+The Phonopy route:
+
+- reads frequencies from `qpoints.yaml`;
+- converts frequencies from THz to `cm^-1`;
+- checks the atom symbols and atom order against the supplied POSCAR;
+- converts Γ-point eigenvectors to a real representation;
+- divides the eigenvectors by the square root of the atomic mass in amu.
+
+A VASP 5 style POSCAR containing element symbols is required. A standard `qpoints.yaml` file may not contain atom symbols or atomic
+masses. When these data are absent, `vasp_raman.py` searches the same
+directory for compatible metadata in `phonopy.yaml`,
+`phonopy_params.yaml`, or `phonopy_disp.yaml`. The atom count and atom
+ordering are checked against the supplied `POSCAR.phon`.
+
+To convert Phonopy modes into the existing external-mode format:
+
+```bash
+python3 vasp_raman.py \
+  --phonopy-qpoints qpoints.yaml \
+  --phonon-poscar POSCAR.phon \
+  --write-external-modes raman_inputs
+```
+
+This creates:
+
+```text
+raman_inputs/freq.dat
+raman_inputs/modes_sqrt_amu.dat
+raman_inputs/external_mode_order.csv
+```
+
+### ASE input
+
+The ASE input is a JSON file containing the frequencies and Cartesian
+eigenvectors.
+
+It may be a list of modes:
+
+```json
+[
+  {
+    "mode": 1,
+    "frequency_cm-1": 500.0,
+    "eigenvector": [
+      [0.1, 0.0, 0.0],
+      [0.0, 0.1, 0.0]
+    ]
+  }
+]
+```
+
+It may also be an object containing a `modes` list.
+
+Each eigenvector must contain one `x y z` row per atom.
+
+Modes returned by `ase.vibrations.Vibrations.get_mode()` are already
+mass-scaled. They should be supplied directly and must not be divided
+by the square root of the atomic mass again.
+
+To convert ASE modes:
+
+```bash
+python3 vasp_raman.py \
+  --ase-modes ase_gamma_modes.json \
+  --phonon-poscar POSCAR.phon \
+  --write-external-modes raman_inputs
+```
+
+### Generating displaced structures
+
+External modes can be used directly with `--gen`.
+
+For example:
+
+```bash
+export VASP_RAMAN_RUN='true'
+export VASP_RAMAN_PARAMS='1_1_2_0.01'
+
+python3 vasp_raman.py \
+  --ase-modes ase_gamma_modes.json \
+  --phonon-poscar POSCAR.phon \
+  --gen
+```
+
+This creates:
+
+```text
+POSCAR.-1.out
+POSCAR.+1.out
+```
+
+Use a persistent filename such as `POSCAR.phon` for the reference
+structure. Do not use `POSCAR` as the persistent input filename because
+`vasp_raman.py` uses `POSCAR` internally as a temporary displaced
+structure.
+
+### Running a Raman calculation directly
+
+The external source can also be used without first writing
+`freq.dat` and `modes_sqrt_amu.dat`.
+
+For ASE modes:
+
+```bash
+export VASP_RAMAN_RUN='mpirun -np 16 vasp_std >> job.out 2>&1'
+export VASP_RAMAN_PARAMS='01_21_2_0.01'
+
+python3 vasp_raman.py \
+  --ase-modes ase_gamma_modes.json \
+  --phonon-poscar POSCAR.phon
+```
+
+For Phonopy modes:
+
+```bash
+python3 vasp_raman.py \
+  --phonopy-qpoints qpoints.yaml \
+  --phonon-poscar POSCAR.phon
+```
+
+### New command-line options
+
+```text
+--phonopy-qpoints FILE
+    Read Γ-point modes from a Phonopy qpoints.yaml file.
+
+--ase-modes FILE
+    Read mass-scaled modes from an ASE-generated JSON file.
+
+--phonon-poscar FILE
+    Read the structure corresponding to the external modes.
+    The default is POSCAR.phon.
+
+--keep-mode-order
+    Keep the ordering supplied by the external source instead
+    of sorting the modes from highest to lowest frequency.
+
+--write-external-modes DIR
+    Write freq.dat, modes_sqrt_amu.dat and
+    external_mode_order.csv to DIR, then exit.
+```
+
+### Validation
+
+The external-mode route checks:
+
+- the number of atoms;
+- the number of modes;
+- the number of atomic rows in each eigenvector;
+- the three-dimensional shape of each atomic vector;
+- zero-norm modes;
+- Phonopy Γ-point and atom-order consistency.
+
+### Bulk-Si benchmark
+
+The external input routes were tested using the same 8-atom bulk-Si cell
+as the original example.
+
+The main Raman-active modes were obtained at approximately:
+
+```text
+Original OUTCAR.phon route: 504.47 cm^-1
+Phonopy-derived route:      503.80 cm^-1
+ASE-derived route:          503.82 cm^-1
+```
+
+The dominant Raman activities from the Phonopy and ASE routes agreed
+with the original workflow to approximately 1%.
+
+### Known limitations
+
+- The Phonopy route currently supports real Γ-point eigenvectors.
+  A mode is rejected if it remains complex after phase alignment.
+- The ASE JSON input should use a documented convention for imaginary
+  frequencies. If `frequency_cm-1` contains only the real part, an
+  imaginary mode may otherwise be written as `0.0 cm^-1`.
+- The external phonon calculation and `--phonon-poscar` structure must
+  use exactly the same atom ordering.
 
 ## Examples
 
@@ -107,7 +339,13 @@ python /home/user/bin/vasp_raman.py > vasp_raman.out
 ## Changelog
 
 #### Current
-* Switched Python 3
+* Switched to Python 3.
+* Added direct Γ-point mode input from Phonopy `qpoints.yaml`.
+* Added direct input from ASE-generated mode JSON files.
+* Added conversion-only output to `freq.dat` and `modes_sqrt_amu.dat`.
+* Added external-mode validation and mode-order tracking.
+* Added clearer progress and error messages.
+* Added unit tests for the Phonopy and ASE input routes.
 
 #### [0.6.0](https://github.com/raman-sc/VASP/blob/0.6.0/vasp_raman.py)
 * ADDED: ability to use phonons obtained from the [vtst tools](http://theory.cm.utexas.edu/vtsttools/dymmat.html)
