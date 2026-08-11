@@ -59,11 +59,11 @@ python3 -m pip install pyyaml ase
 
 For Raman calculations, `vasp_raman.py` requires two environment variables to be set:
 
-  - `VASP_RAMAN_PARAMS` is defined as `FIRST-MODE_LAST-MODE_NDERIV_STEPSIZE` where:
-      - `FIRST_MODE` - integer, first mode for which derivative of the polarizability is computed
-      - `LAST-MODE`  - integer, last mode for which derivative of the polarizability is computed
+  - `VASP_RAMAN_PARAMS` is defined as `FIRST_LAST_NDERIV_STEP` where:
+      - `FIRST` - integer, first mode for which derivative of the polarizability is computed
+      - `LAST`  - integer, last mode for which derivative of the polarizability is computed
       - `NDERIV`     - integer, scheme for finite difference, **currently** only value `2` is supported
-      - `STEPSIZE`   - float, step-size for finite difference, in Angstroms
+      - `STEP`   - float, step-size for finite difference, in Angstroms
         
     Example: `VASP_RAMAN_PARAMS=01_10_2_0.01`
 
@@ -120,10 +120,13 @@ python3 /home/user/bin/vasp_raman.py > vasp_raman.out
 
 1. a Phonopy `qpoints.yaml` file;
 2. an ASE-generated JSON mode file;
-3. existing `freq.dat` and `modes_sqrt_amu.dat` files;
-4. the original VASP `OUTCAR.phon` file.
+3. a direct ASE `Vibrations` calculation using VASP;
+4. existing `freq.dat` and `modes_sqrt_amu.dat` files;
+5. the original VASP `OUTCAR.phon` file.
 
 Only one external source should be selected at a time.
+
+
 
 ### General requirements
 
@@ -158,11 +161,7 @@ The Phonopy route:
 - converts Γ-point eigenvectors to a real representation;
 - divides the eigenvectors by the square root of the atomic mass in amu.
 
-A VASP 5 style POSCAR containing element symbols is required. A standard `qpoints.yaml` file may not contain atom symbols or atomic
-masses. When these data are absent, `vasp_raman.py` searches the same
-directory for compatible metadata in `phonopy.yaml`,
-`phonopy_params.yaml`, or `phonopy_disp.yaml`. The atom count and atom
-ordering are checked against the supplied `POSCAR.phon`.
+A VASP 5 style POSCAR containing element symbols is required.
 
 To convert Phonopy modes into the existing external-mode format:
 
@@ -217,6 +216,111 @@ python3 vasp_raman.py \
   --phonon-poscar POSCAR.phon \
   --write-external-modes raman_inputs
 ```
+
+### Direct ASE vibration calculation
+
+The `--run-ase-vibrations` option runs or resumes an ASE
+`Vibrations` calculation using the ASE VASP calculator. The generated
+Gamma-point frequencies and mass-scaled Cartesian modes are passed
+directly to the same shared validation and Raman workflow used by the
+Phonopy and ASE JSON routes.
+
+This option requires:
+
+- ASE;
+- a working VASP installation;
+- VASP pseudopotentials;
+- a JSON file containing the ASE VASP calculator settings;
+- either a `command` entry in that JSON file or the
+  `ASE_VASP_COMMAND` environment variable.
+
+The reference structure is supplied using `--phonon-poscar`. The atom
+order in this file is retained throughout the vibration calculation.
+
+An example settings file is:
+
+```json
+{
+  "encut": 500,
+  "ediff": 1e-8,
+  "xc": "PBE",
+  "kpts": [1, 1, 1],
+  "gamma": true,
+  "ismear": 0,
+  "sigma": 0.01,
+  "ibrion": -1,
+  "nsw": 0,
+  "isym": 0,
+  "prec": "Accurate",
+  "lwave": false,
+  "lcharg": false,
+  "lreal": false
+}
+```
+
+The VASP command may be supplied through the environment:
+
+```bash
+export ASE_VASP_COMMAND='mpirun -np 16 /path/to/vasp_gam'
+```
+
+Alternatively, the settings JSON may contain:
+
+```json
+{
+  "command": "mpirun -np 16 /path/to/vasp_gam"
+}
+```
+
+`VASP_PP_PATH` must point to the directory containing the VASP
+pseudopotential collections, for example:
+
+```bash
+export VASP_PP_PATH=/path/to/vasp/potentials
+```
+
+A conversion-only Direct ASE run can be started using:
+
+```bash
+python3 vasp_raman.py \
+  --run-ase-vibrations \
+  --ase-vasp-settings ase_vasp_settings.json \
+  --phonon-poscar POSCAR.phon \
+  --ase-vibration-dir ase_vibrations \
+  --write-external-modes raman_inputs
+```
+
+The default displacement size is `0.01 Angstrom` and the default
+finite-difference order is `nfree=2`. These may be changed using:
+
+```text
+--ase-delta FLOAT
+--ase-nfree INT
+```
+
+The Direct ASE route writes:
+
+```text
+ase_vibrations/ase_gamma_modes.json
+ase_vibrations/ase_vibrations_summary.txt
+ase_vibrations/ase_vibration_run.json
+raman_inputs/freq.dat
+raman_inputs/modes_sqrt_amu.dat
+raman_inputs/external_mode_order.csv
+```
+
+ASE stores the force calculations in a vibration cache below the
+selected vibration directory. A later invocation using the same
+structure, displacement settings and vibration directory reuses all
+completed cache entries. Only missing displacements are calculated.
+
+A completed cache can therefore be used to resume an interrupted run.
+Users should not manually edit or remove individual cache files unless
+they intend to recalculate the corresponding displacement.
+
+The Direct ASE route generates the vibration modes only. The Raman
+activity calculation still uses VASP dielectric tensors as the
+back-end.
 
 ### Generating displaced structures
 
@@ -290,6 +394,26 @@ python3 vasp_raman.py \
 --write-external-modes DIR
     Write freq.dat, modes_sqrt_amu.dat and
     external_mode_order.csv to DIR, then exit.
+
+--run-ase-vibrations
+    Run or resume an ASE Vibrations calculation using VASP and use
+    the resulting Gamma-point modes.
+
+--ase-vasp-settings FILE
+    Read ASE Vasp calculator parameters from a JSON file. This option
+    is required with --run-ase-vibrations.
+
+--ase-vibration-dir DIR
+    Store ASE calculator directories, vibration cache files, mode JSON,
+    summary and run metadata in DIR. The default is ase_vibrations.
+
+--ase-delta FLOAT
+    Set the ASE finite-displacement size in Angstrom. The default is
+    0.01 and the value must be positive.
+
+--ase-nfree INT
+    Set the ASE finite-difference order. Supported values are 2 and 4;
+    the default is 2.
 ```
 
 ### Validation
@@ -302,6 +426,16 @@ The external-mode route checks:
 - the three-dimensional shape of each atomic vector;
 - zero-norm modes;
 - Phonopy Γ-point and atom-order consistency.
+
+The Direct ASE route also checks:
+
+- that `--ase-vasp-settings` is supplied;
+- that the settings file can be read;
+- that `--ase-delta` is positive;
+- that `--ase-nfree` is either `2` or `4`;
+- that a VASP command is available through the settings file or
+  `ASE_VASP_COMMAND`;
+- that only one external mode source is selected.
 
 ### Bulk-Si benchmark
 
@@ -318,6 +452,23 @@ ASE-derived route:          503.82 cm^-1
 
 The dominant Raman activities from the Phonopy and ASE routes agreed
 with the original workflow to approximately 1%.
+
+### Direct ASE integration test
+
+The Direct ASE route was also tested from an empty cache using a
+three-atom water molecule.
+
+With `delta=0.01 Angstrom` and `nfree=2`:
+
+- all 19 equilibrium and displaced-force cache entries were generated;
+- 9 vibrational modes were extracted;
+- the three main internal modes were obtained near
+  `3829.7`, `3718.4` and `1580.7 cm^-1`;
+- a second invocation reused the completed cache;
+- the cache hashes were unchanged after restart;
+- `freq.dat`, `modes_sqrt_amu.dat` and
+  `external_mode_order.csv` were identical between the first and
+  restarted runs.
 
 ### Known limitations
 
@@ -346,6 +497,18 @@ with the original workflow to approximately 1%.
 * Added external-mode validation and mode-order tracking.
 * Added clearer progress and error messages.
 * Added unit tests for the Phonopy and ASE input routes.
+* Added direct ASE/VASP finite-displacement vibration calculations.
+* Added restart and reuse of ASE vibration caches.
+* Added ASE VASP settings, displacement-size and finite-difference CLI
+  options.
+* Replaced `optparse` with `argparse`.
+* Moved command-line validation into `validate_options()`.
+* Refactored structure loading, mode loading, displaced-structure
+  generation, dielectric extraction and Raman calculation into
+  reusable functions.
+* Expanded the unit-test suite to 30 tests.
+* Added real regressions for the original VASP, Phonopy, ASE JSON and
+  Direct ASE routes.
 
 #### [0.6.0](https://github.com/raman-sc/VASP/blob/0.6.0/vasp_raman.py)
 * ADDED: ability to use phonons obtained from the [vtst tools](http://theory.cm.utexas.edu/vtsttools/dymmat.html)
