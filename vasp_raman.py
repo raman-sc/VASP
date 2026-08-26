@@ -16,6 +16,7 @@
 import argparse
 import cmath
 import datetime
+import hashlib
 import json
 import math
 import os
@@ -574,6 +575,12 @@ def read_phonopy_qpoints(
     qpoints_fh.seek(0)
     data = yaml.safe_load(qpoints_fh)
 
+    if not isinstance(data, dict):
+        raise ValueError(
+            "Phonopy YAML must contain a mapping "
+            "at the top level."
+        )
+
     metadata = None
     natom_hint = data.get('natom')
 
@@ -646,11 +653,187 @@ def read_phonopy_qpoints(
         metadata=metadata,
     )
 
+def validate_ase_mode_metadata(
+    metadata,
+    nat,
+    frozen=None,
+):
+    """Validate optional ASE JSON metadata and return its mode count."""
+    if metadata is None:
+        # Legacy ASE JSON files contain only a mode list.
+        # The shared validator will retain its default 3N rule.
+        return None
 
-def parse_ase_data(data):
+    if not isinstance(metadata, dict):
+        raise ValueError(
+            "ASE mode metadata must be a JSON object."
+        )
+
+    if (
+        isinstance(nat, bool)
+        or not isinstance(nat, int)
+        or nat <= 0
+    ):
+        raise ValueError(
+            "The number of atoms must be a positive integer."
+        )
+
+    schema_version = metadata.get(
+        'schema_version',
+        1,
+    )
+
+    if schema_version != 1:
+        raise ValueError(
+            "Unsupported ASE mode metadata schema_version: "
+            + str(schema_version)
+        )
+
+    number_of_atoms = metadata.get(
+        'number_of_atoms'
+    )
+
+    if (
+        isinstance(number_of_atoms, bool)
+        or not isinstance(number_of_atoms, int)
+    ):
+        raise ValueError(
+            "ASE mode metadata number_of_atoms must be an integer."
+        )
+
+    if number_of_atoms != nat:
+        raise ValueError(
+            "ASE mode metadata number_of_atoms is "
+            f"{number_of_atoms}; expected {nat}."
+        )
+
+    raw_indices = metadata.get(
+        'vibrated_atom_indices'
+    )
+
+    if (
+        not isinstance(
+            raw_indices,
+            (list, tuple),
+        )
+        or not raw_indices
+    ):
+        raise ValueError(
+            "ASE mode metadata must contain a non-empty "
+            "vibrated_atom_indices list."
+        )
+
+    vibrated_atom_indices = []
+
+    for index in raw_indices:
+        if (
+            isinstance(index, bool)
+            or not isinstance(index, int)
+        ):
+            raise ValueError(
+                "ASE mode metadata vibrated atom indices "
+                "must be integers."
+            )
+
+        vibrated_atom_indices.append(
+            index
+        )
+
+    if (
+        len(set(vibrated_atom_indices))
+        != len(vibrated_atom_indices)
+    ):
+        raise ValueError(
+            "ASE mode metadata vibrated atom indices "
+            "contain duplicates."
+        )
+
+    invalid_indices = [
+        index
+        for index in vibrated_atom_indices
+        if index < 0 or index >= nat
+    ]
+
+    if invalid_indices:
+        raise ValueError(
+            "ASE mode metadata contains atom indices "
+            "outside the structure: "
+            + ", ".join(
+                str(index)
+                for index in invalid_indices
+            )
+        )
+
+    calculated_mode_count = (
+        3 * len(vibrated_atom_indices)
+    )
+
+    expected_mode_count = metadata.get(
+        'expected_mode_count',
+        calculated_mode_count,
+    )
+
+    if (
+        isinstance(expected_mode_count, bool)
+        or not isinstance(expected_mode_count, int)
+        or expected_mode_count <= 0
+    ):
+        raise ValueError(
+            "ASE mode metadata expected_mode_count "
+            "must be a positive integer."
+        )
+
+    if expected_mode_count != calculated_mode_count:
+        raise ValueError(
+            "ASE mode metadata expected_mode_count is "
+            f"{expected_mode_count}; expected "
+            f"{calculated_mode_count} from "
+            "vibrated_atom_indices."
+        )
+
+    if frozen is not None:
+        if (
+            not isinstance(
+                frozen,
+                (list, tuple),
+            )
+            or len(frozen) != nat
+        ):
+            raise ValueError(
+                "Frozen-atom flags do not match "
+                "the number of atoms."
+            )
+
+        expected_indices = [
+            atom_index
+            for atom_index, is_frozen
+            in enumerate(frozen)
+            if not is_frozen
+        ]
+
+        if vibrated_atom_indices != expected_indices:
+            raise ValueError(
+                "ASE mode metadata vibrated atom indices "
+                "do not match the fully fixed atoms in "
+                "the supplied POSCAR."
+            )
+
+    return expected_mode_count
+
+def parse_ase_data(
+    data,
+    return_metadata=False,
+):
     """Convert ASE JSON data into the canonical mode representation."""
+    metadata = None
+
     if isinstance(data, dict):
-        data = data.get('modes')
+        metadata = data.get(
+            'metadata'
+        )
+        data = data.get(
+            'modes'
+        )
 
     if not isinstance(data, list) or not data:
         raise ValueError(
@@ -703,15 +886,22 @@ def parse_ase_data(data):
             'eigenvector': parsed_eigenvector,
         })
 
+    if return_metadata:
+        return modes, metadata
+
     return modes
 
 
-def read_ase_modes(ase_fh):
-    """Read ASE modes from a JSON file handle."""
+def read_ase_modes(
+    ase_fh,
+    return_metadata=False,
+):
+    """Read ASE modes and optional metadata from a JSON file handle."""
     ase_fh.seek(0)
 
     return parse_ase_data(
-        json.load(ase_fh)
+        json.load(ase_fh),
+        return_metadata=return_metadata,
     )
 
 def parse_ase_vasp_settings(data):
@@ -828,6 +1018,774 @@ def ase_vibrations_to_modes(vibrations):
 
     return modes
 
+def build_ase_cache_manifest(
+    atoms,
+    settings,
+    delta,
+    nfree,
+    vibrated_atom_indices,
+):
+    """Build deterministic metadata for an ASE vibration cache."""
+    if not isinstance(settings, dict):
+        raise ValueError(
+            "ASE calculator settings must be a dictionary."
+        )
+
+    try:
+        number_of_atoms = len(atoms)
+    except TypeError as err:
+        raise ValueError(
+            "ASE atoms object does not provide an atom count."
+        ) from err
+
+    if number_of_atoms <= 0:
+        raise ValueError(
+            "ASE vibration structure must contain at least one atom."
+        )
+
+    try:
+        delta_value = float(delta)
+    except (TypeError, ValueError) as err:
+        raise ValueError(
+            "ASE vibration delta must be numeric."
+        ) from err
+
+    if (
+        not math.isfinite(delta_value)
+        or delta_value <= 0.0
+    ):
+        raise ValueError(
+            "ASE vibration delta must be a positive finite value."
+        )
+
+    try:
+        nfree_value = int(nfree)
+    except (TypeError, ValueError) as err:
+        raise ValueError(
+            "ASE vibration nfree must be an integer."
+        ) from err
+
+    if nfree_value not in (2, 4):
+        raise ValueError(
+            "ASE Vibrations supports nfree = 2 or nfree = 4."
+        )
+
+    try:
+        indices = [
+            int(index)
+            for index in vibrated_atom_indices
+        ]
+    except (TypeError, ValueError) as err:
+        raise ValueError(
+            "Vibrated atom indices must be integers."
+        ) from err
+
+    if not indices:
+        raise ValueError(
+            "ASE Vibrations must include at least one atom."
+        )
+
+    if len(set(indices)) != len(indices):
+        raise ValueError(
+            "Vibrated atom indices contain duplicates."
+        )
+
+    invalid_indices = [
+        index
+        for index in indices
+        if index < 0
+        or index >= number_of_atoms
+    ]
+
+    if invalid_indices:
+        raise ValueError(
+            "Vibrated atom index is outside the structure: "
+            + ", ".join(
+                str(index)
+                for index in invalid_indices
+            )
+        )
+
+    def normalise(value):
+        """Convert NumPy and ASE values to deterministic JSON data."""
+        if (
+            value is None
+            or isinstance(
+                value,
+                (
+                    str,
+                    bool,
+                    int,
+                ),
+            )
+        ):
+            return value
+
+        if isinstance(value, float):
+            if not math.isfinite(value):
+                raise ValueError(
+                    "ASE cache metadata contains a non-finite value."
+                )
+
+            return value
+
+        if isinstance(value, dict):
+            return {
+                str(key): normalise(
+                    value[key]
+                )
+                for key in sorted(
+                    value,
+                    key=lambda item: str(item),
+                )
+            }
+
+        if isinstance(
+            value,
+            (
+                list,
+                tuple,
+            ),
+        ):
+            return [
+                normalise(item)
+                for item in value
+            ]
+
+        if hasattr(value, 'todict'):
+            return normalise(
+                value.todict()
+            )
+
+        if hasattr(value, 'tolist'):
+            return normalise(
+                value.tolist()
+            )
+
+        if hasattr(value, 'item'):
+            return normalise(
+                value.item()
+            )
+
+        raise ValueError(
+            "ASE cache metadata contains an unsupported value "
+            "of type "
+            + type(value).__name__
+            + "."
+        )
+
+    def atom_value(
+        method_name,
+        default=None,
+    ):
+        method = getattr(
+            atoms,
+            method_name,
+            None,
+        )
+
+        if method is None:
+            return default
+
+        return normalise(
+            method()
+        )
+
+    constraints = []
+
+    for constraint in getattr(
+        atoms,
+        'constraints',
+        [],
+    ):
+        constraints.append(
+            normalise(
+                constraint
+            )
+        )
+
+    structure = {
+        'atomic_numbers': atom_value(
+            'get_atomic_numbers'
+        ),
+        'positions_angstrom': atom_value(
+            'get_positions'
+        ),
+        'cell_angstrom': atom_value(
+            'get_cell'
+        ),
+        'pbc': atom_value(
+            'get_pbc'
+        ),
+        'masses_amu': atom_value(
+            'get_masses'
+        ),
+        'initial_magnetic_moments': atom_value(
+            'get_initial_magnetic_moments'
+        ),
+        'initial_charges': atom_value(
+            'get_initial_charges'
+        ),
+        'constraints': constraints,
+    }
+
+    required_structure_fields = [
+        'atomic_numbers',
+        'positions_angstrom',
+        'cell_angstrom',
+        'pbc',
+    ]
+
+    missing_fields = [
+        field
+        for field in required_structure_fields
+        if structure[field] is None
+    ]
+
+    if missing_fields:
+        raise ValueError(
+            "ASE atoms object is missing structure data: "
+            + ", ".join(
+                missing_fields
+            )
+        )
+
+    canonical_structure = json.dumps(
+        structure,
+        sort_keys=True,
+        separators=(
+            ',',
+            ':',
+        ),
+        ensure_ascii=True,
+        allow_nan=False,
+    )
+
+    structure_sha256 = hashlib.sha256(
+        canonical_structure.encode(
+            'utf-8'
+        )
+    ).hexdigest()
+
+    # The command controls how VASP is launched, but it does not
+    # define the scientific contents of the cached force results.
+    scientific_settings = {
+        key: value
+        for key, value in settings.items()
+        if key != 'command'
+    }
+
+    return {
+        'schema_version': 1,
+        'structure_sha256': structure_sha256,
+        'structure': structure,
+        'calculator_settings': normalise(
+            scientific_settings
+        ),
+        'delta_angstrom': delta_value,
+        'nfree': nfree_value,
+        'vibrated_atom_indices': indices,
+    }
+
+def write_ase_cache_manifest(
+    workdir,
+    manifest,
+):
+    """Write ASE cache compatibility metadata atomically."""
+    if not isinstance(manifest, dict):
+        raise ValueError(
+            "ASE cache manifest must be a dictionary."
+        )
+
+    workdir = os.path.abspath(
+        workdir
+    )
+
+    if not os.path.isdir(workdir):
+        os.makedirs(
+            workdir
+        )
+
+    manifest_filename = os.path.join(
+        workdir,
+        'ase_vibration_cache_manifest.json',
+    )
+
+    temporary_filename = (
+        manifest_filename
+        + '.tmp'
+    )
+
+    try:
+        with open(
+            temporary_filename,
+            'w',
+        ) as manifest_fh:
+            json.dump(
+                manifest,
+                manifest_fh,
+                indent=2,
+                sort_keys=True,
+                allow_nan=False,
+            )
+
+            manifest_fh.write(
+                '\n'
+            )
+
+        # Replace the destination only after the complete
+        # temporary file has been written successfully.
+        os.replace(
+            temporary_filename,
+            manifest_filename,
+        )
+
+    except (
+        OSError,
+        TypeError,
+        ValueError,
+    ) as err:
+        if os.path.isfile(
+            temporary_filename
+        ):
+            try:
+                os.remove(
+                    temporary_filename
+                )
+            except OSError:
+                pass
+
+        raise ValueError(
+            "Could not write ASE vibration cache manifest: "
+            + str(err)
+        ) from err
+
+    return manifest_filename
+
+def validate_ase_cache_file(
+    cache_filename,
+    expected_atom_count=None,
+):
+    """Validate one ASE vibration displacement cache file."""
+    try:
+        with open(
+            cache_filename,
+            'r',
+        ) as cache_fh:
+            cache_data = json.load(
+                cache_fh
+            )
+
+    except (OSError, ValueError) as err:
+        raise ValueError(
+            "ASE vibration cache file contains malformed JSON: "
+            + cache_filename
+            + ": "
+            + str(err)
+        ) from err
+
+    if not isinstance(
+        cache_data,
+        dict,
+    ):
+        raise ValueError(
+            "ASE vibration cache file must contain "
+            "a JSON object: "
+            + cache_filename
+        )
+
+    if 'forces' not in cache_data:
+        raise ValueError(
+            "ASE vibration cache file does not contain forces: "
+            + cache_filename
+        )
+
+    forces = cache_data[
+        'forces'
+    ]
+
+    def flatten_numeric_values(value):
+        if isinstance(
+            value,
+            (list, tuple),
+        ):
+            flattened = []
+
+            for item in value:
+                flattened.extend(
+                    flatten_numeric_values(
+                        item
+                    )
+                )
+
+            return flattened
+
+        try:
+            numeric_value = float(
+                value
+            )
+        except (TypeError, ValueError) as err:
+            raise ValueError(
+                "ASE vibration cache file contains "
+                "non-numeric force data: "
+                + cache_filename
+            ) from err
+
+        if not math.isfinite(
+            numeric_value
+        ):
+            raise ValueError(
+                "ASE vibration cache file contains "
+                "non-finite force data: "
+                + cache_filename
+            )
+
+        return [
+            numeric_value
+        ]
+
+    force_row_count = None
+
+    # Simple JSON representation used in tests and by
+    # some external cache-generation workflows.
+    if isinstance(
+        forces,
+        (list, tuple),
+    ):
+        if not forces:
+            raise ValueError(
+                "ASE vibration cache file contains "
+                "an empty forces array: "
+                + cache_filename
+            )
+
+        for row_index, row in enumerate(
+            forces,
+            start=1,
+        ):
+            if (
+                not isinstance(
+                    row,
+                    (list, tuple),
+                )
+                or len(row) != 3
+            ):
+                raise ValueError(
+                    "ASE vibration cache file force row "
+                    + str(row_index)
+                    + " does not contain three components: "
+                    + cache_filename
+                )
+
+            flatten_numeric_values(
+                row
+            )
+
+        force_row_count = len(
+            forces
+        )
+
+    # ASE JSON encodes NumPy arrays using __ndarray__.
+    elif (
+        isinstance(forces, dict)
+        and '__ndarray__' in forces
+    ):
+        encoded_array = forces[
+            '__ndarray__'
+        ]
+
+        if (
+            not isinstance(
+                encoded_array,
+                (list, tuple),
+            )
+            or len(encoded_array) != 3
+        ):
+            raise ValueError(
+                "ASE vibration cache file contains "
+                "an invalid encoded forces array: "
+                + cache_filename
+            )
+
+        shape = encoded_array[0]
+
+        if (
+            not isinstance(
+                shape,
+                (list, tuple),
+            )
+            or len(shape) != 2
+            or any(
+                isinstance(value, bool)
+                or not isinstance(value, int)
+                for value in shape
+            )
+        ):
+            raise ValueError(
+                "ASE vibration cache file contains "
+                "an invalid forces shape: "
+                + cache_filename
+            )
+
+        force_row_count = shape[0]
+        component_count = shape[1]
+
+        if (
+            force_row_count <= 0
+            or component_count != 3
+        ):
+            raise ValueError(
+                "ASE vibration cache file forces must have "
+                "shape N x 3: "
+                + cache_filename
+            )
+
+        force_values = flatten_numeric_values(
+            encoded_array[2]
+        )
+
+        if (
+            len(force_values)
+            != force_row_count * component_count
+        ):
+            raise ValueError(
+                "ASE vibration cache file force data do not "
+                "match the encoded shape: "
+                + cache_filename
+            )
+
+    else:
+        raise ValueError(
+            "ASE vibration cache file contains "
+            "an invalid forces value: "
+            + cache_filename
+        )
+
+    if expected_atom_count is not None:
+        if (
+            isinstance(expected_atom_count, bool)
+            or not isinstance(expected_atom_count, int)
+            or expected_atom_count <= 0
+        ):
+            raise ValueError(
+                "Expected ASE cache atom count must be "
+                "a positive integer."
+            )
+
+        if force_row_count != expected_atom_count:
+            raise ValueError(
+                "ASE vibration cache file contains forces for "
+                + str(force_row_count)
+                + " atoms; expected "
+                + str(expected_atom_count)
+                + ": "
+                + cache_filename
+            )
+
+    return True
+
+def validate_ase_cache_reuse(
+    workdir,
+    expected_manifest,
+):
+    """Validate an existing ASE vibration cache before reuse."""
+    if not isinstance(expected_manifest, dict):
+        raise ValueError(
+            "Expected ASE cache manifest must be a dictionary."
+        )
+
+    workdir = os.path.abspath(
+        workdir
+    )
+
+    vibration_directory = os.path.join(
+        workdir,
+        'vib',
+    )
+
+    manifest_filename = os.path.join(
+        workdir,
+        'ase_vibration_cache_manifest.json',
+    )
+
+    cache_files = []
+
+    if os.path.isdir(
+        vibration_directory
+    ):
+        for filename in sorted(
+            os.listdir(
+                vibration_directory
+            )
+        ):
+            cache_filename = os.path.join(
+                vibration_directory,
+                filename,
+            )
+
+            if (
+                filename.startswith('cache.')
+                and filename.endswith('.json')
+                and os.path.isfile(
+                    cache_filename
+                )
+            ):
+                cache_files.append(
+                    cache_filename
+                )
+
+    # No cache exists, so this is a fresh calculation.
+    if not cache_files:
+        return False
+
+    empty_cache_files = [
+        os.path.basename(filename)
+        for filename in cache_files
+        if os.path.getsize(filename) == 0
+    ]
+
+    if empty_cache_files:
+        raise ValueError(
+            "ASE vibration cache contains empty files: "
+            + ", ".join(empty_cache_files)
+            + ". Remove the empty files before resuming."
+        )
+
+    if not os.path.isfile(
+        manifest_filename
+    ):
+        raise ValueError(
+            "Existing ASE vibration cache has no compatibility "
+            "manifest: "
+            + manifest_filename
+        )
+
+    try:
+        with open(
+            manifest_filename,
+            'r',
+        ) as manifest_fh:
+            recorded_manifest = json.load(
+                manifest_fh
+            )
+
+    except (OSError, ValueError) as err:
+        raise ValueError(
+            "Could not read ASE vibration cache manifest: "
+            + str(err)
+        ) from err
+
+    if not isinstance(
+        recorded_manifest,
+        dict,
+    ):
+        raise ValueError(
+            "ASE vibration cache manifest must contain "
+            "a JSON object."
+        )
+
+    mismatched_fields = [
+        field
+        for field in sorted(
+            expected_manifest
+        )
+        if recorded_manifest.get(field)
+        != expected_manifest[field]
+    ]
+
+    if mismatched_fields:
+        raise ValueError(
+            "Existing ASE vibration cache is incompatible "
+            "with the requested calculation. "
+            "Mismatched fields: "
+            + ", ".join(mismatched_fields)
+        )
+
+    expected_atom_count = None
+
+    structure_metadata = expected_manifest.get(
+        'structure'
+    )
+
+    if isinstance(
+        structure_metadata,
+        dict,
+    ):
+        atomic_numbers = (
+            structure_metadata.get(
+                'atomic_numbers'
+            )
+        )
+
+        if isinstance(
+            atomic_numbers,
+            (list, tuple),
+        ):
+            expected_atom_count = len(
+                atomic_numbers
+            )
+
+    for cache_filename in cache_files:
+        validate_ase_cache_file(
+            cache_filename=cache_filename,
+            expected_atom_count=(
+                expected_atom_count
+            ),
+        )
+
+    return True
+
+def prepare_ase_cache(
+    atoms,
+    settings,
+    delta,
+    nfree,
+    vibrated_atom_indices,
+    workdir,
+):
+    """Build, validate and, when needed, write ASE cache metadata."""
+    expected_manifest = (
+        build_ase_cache_manifest(
+            atoms=atoms,
+            settings=settings,
+            delta=delta,
+            nfree=nfree,
+            vibrated_atom_indices=(
+                vibrated_atom_indices
+            ),
+        )
+    )
+
+    cache_reused = (
+        validate_ase_cache_reuse(
+            workdir=workdir,
+            expected_manifest=(
+                expected_manifest
+            ),
+        )
+    )
+
+    manifest_filename = os.path.join(
+        os.path.abspath(
+            workdir
+        ),
+        'ase_vibration_cache_manifest.json',
+    )
+
+    if not cache_reused:
+        manifest_filename = (
+            write_ase_cache_manifest(
+                workdir=workdir,
+                manifest=expected_manifest,
+            )
+        )
+
+    return (
+        expected_manifest,
+        cache_reused,
+        manifest_filename,
+    )
+
 def run_ase_vibrations(
     structure_filename,
     settings,
@@ -849,6 +1807,7 @@ def run_ase_vibrations(
     try:
         import ase
         from ase.calculators.vasp import Vasp
+        from ase.constraints import FixAtoms
         from ase.io import read
         from ase.vibrations import Vibrations
     except ImportError as err:
@@ -917,11 +1876,110 @@ def run_ase_vibrations(
 
     atoms.calc = calculator
 
+    fully_fixed_atom_indices = set()
+
+    for constraint in getattr(
+        atoms,
+        'constraints',
+        [],
+    ):
+        if not isinstance(
+            constraint,
+            FixAtoms,
+        ):
+            continue
+
+        try:
+            fixed_indices = (
+                constraint.get_indices()
+            )
+        except AttributeError as err:
+            raise RuntimeError(
+                "Could not read fully fixed atom indices "
+                "from the ASE structure."
+            ) from err
+
+        fully_fixed_atom_indices.update(
+            int(index)
+            for index in fixed_indices
+        )
+
+    requested_vibrated_atom_indices = [
+        atom_index
+        for atom_index in range(
+            len(atoms)
+        )
+        if atom_index not in fully_fixed_atom_indices
+    ]
+
+    if not requested_vibrated_atom_indices:
+        raise ValueError(
+            "Direct ASE vibrations require at least one "
+            "atom that is not fully fixed."
+        )
+
     vibrations = Vibrations(
         atoms,
         name=vibration_name,
         delta=delta,
         nfree=nfree,
+        indices=requested_vibrated_atom_indices,
+    )
+
+    try:
+        vibrated_atom_indices = [
+            int(index)
+            for index in vibrations.indices
+        ]
+    except (
+        AttributeError,
+        TypeError,
+        ValueError,
+    ) as err:
+        raise RuntimeError(
+            "Could not determine which atoms ASE will vibrate."
+        ) from err
+
+    if (
+        vibrated_atom_indices
+        != requested_vibrated_atom_indices
+    ):
+        raise RuntimeError(
+            "ASE Vibrations selected atom indices that differ "
+            "from the explicit movable-atom list."
+        )
+
+    (
+        cache_manifest,
+        cache_reused,
+        cache_manifest_path,
+    ) = prepare_ase_cache(
+        atoms=atoms,
+        settings=settings,
+        delta=delta,
+        nfree=nfree,
+        vibrated_atom_indices=(
+            vibrated_atom_indices
+        ),
+        workdir=workdir,
+    )
+
+    if cache_reused:
+        print(
+            "[direct ASE]: Compatible vibration cache found; "
+            "completed force calculations will be reused.",
+            flush=True,
+        )
+    else:
+        print(
+            "[direct ASE]: Starting with a fresh vibration cache.",
+            flush=True,
+        )
+
+    print(
+        "[direct ASE]: Cache compatibility manifest: "
+        + cache_manifest_path,
+        flush=True,
     )
 
     print(
@@ -968,9 +2026,32 @@ def run_ase_vibrations(
             'eigenvector': mode['eigenvector'],
         })
 
+    mode_json_metadata = {
+        'schema_version': 1,
+        'number_of_atoms': len(atoms),
+        'vibrated_atom_indices': (
+            vibrated_atom_indices
+        ),
+        'expected_mode_count': (
+            3 * len(
+                vibrated_atom_indices
+            )
+        ),
+        'structure_sha256': (
+            cache_manifest[
+                'structure_sha256'
+            ]
+        ),
+    }
+
+    mode_json_payload = {
+        'metadata': mode_json_metadata,
+        'modes': json_modes,
+    }
+
     with open(mode_json_path, 'w') as mode_fh:
         json.dump(
-            json_modes,
+            mode_json_payload,
             mode_fh,
             indent=2,
         )
@@ -990,6 +2071,18 @@ def run_ase_vibrations(
         'calculator_directory': calculator_directory,
         'vibration_cache': vibration_name,
         'calculator_settings': settings,
+        'vibrated_atom_indices': (
+            vibrated_atom_indices
+        ),
+        'cache_manifest': (
+            cache_manifest_path
+        ),
+        'cache_reused': cache_reused,
+        'structure_sha256': (
+            cache_manifest[
+                'structure_sha256'
+            ]
+        ),
     }
 
     with open(run_log_path, 'w') as run_fh:
@@ -1012,9 +2105,20 @@ def run_ase_vibrations(
         flush=True,
     )
 
-    return modes, mode_json_path, summary_path
+    return (
+        modes,
+        mode_json_path,
+        summary_path,
+        vibrated_atom_indices,
+    )
 
-def validate_external_modes(modes, nat):
+def validate_external_modes(
+    modes,
+    nat,
+    expected_mode_count=None,
+    vibrated_atom_indices=None,
+    excluded_vector_tolerance=1.0e-12,
+):
     """Validate canonical external modes and return Raman input arrays."""
     if not isinstance(nat, int) or nat <= 0:
         raise ValueError(
@@ -1026,11 +2130,108 @@ def validate_external_modes(modes, nat):
             "External mode source must contain a non-empty mode list."
         )
 
-    if len(modes) != 3 * nat:
+    if expected_mode_count is None:
+        expected_mode_count = 3 * nat
+    elif (
+        isinstance(expected_mode_count, bool)
+        or not isinstance(expected_mode_count, int)
+        or expected_mode_count <= 0
+    ):
+        raise ValueError(
+            "The expected number of external modes must be "
+            "a positive integer."
+        )
+
+    if expected_mode_count > 3 * nat:
+        raise ValueError(
+            f"The expected number of external modes is "
+            f"{expected_mode_count}; it cannot exceed "
+            f"{3 * nat} for {nat} atoms."
+        )
+
+    if len(modes) != expected_mode_count:
         raise ValueError(
             f"External mode source contains {len(modes)} modes; "
-            f"expected {3 * nat}."
+            f"expected {expected_mode_count}."
         )
+
+    excluded_atom_indices = set()
+
+    if vibrated_atom_indices is not None:
+        if (
+            not isinstance(
+                vibrated_atom_indices,
+                (list, tuple),
+            )
+            or not vibrated_atom_indices
+        ):
+            raise ValueError(
+                "Vibrated atom indices must be a non-empty list."
+            )
+
+        validated_indices = []
+
+        for index in vibrated_atom_indices:
+            if (
+                isinstance(index, bool)
+                or not isinstance(index, int)
+            ):
+                raise ValueError(
+                    "Vibrated atom indices must be integers."
+                )
+
+            if index < 0 or index >= nat:
+                raise ValueError(
+                    "Vibrated atom index is outside the structure: "
+                    + str(index)
+                )
+
+            validated_indices.append(
+                index
+            )
+
+        if (
+            len(set(validated_indices))
+            != len(validated_indices)
+        ):
+            raise ValueError(
+                "Vibrated atom indices contain duplicates."
+            )
+
+        index_mode_count = (
+            3 * len(validated_indices)
+        )
+
+        if expected_mode_count != index_mode_count:
+            raise ValueError(
+                "The expected external mode count does not match "
+                "the vibrated atom indices."
+            )
+
+        excluded_atom_indices = (
+            set(range(nat))
+            - set(validated_indices)
+        )
+
+        try:
+            excluded_vector_tolerance = float(
+                excluded_vector_tolerance
+            )
+        except (TypeError, ValueError) as err:
+            raise ValueError(
+                "Excluded-vector tolerance must be numeric."
+            ) from err
+
+        if (
+            not math.isfinite(
+                excluded_vector_tolerance
+            )
+            or excluded_vector_tolerance < 0.0
+        ):
+            raise ValueError(
+                "Excluded-vector tolerance must be a "
+                "non-negative finite value."
+            )
 
     eigvals = []
     eigvecs = []
@@ -1082,7 +2283,9 @@ def validate_external_modes(modes, nat):
 
         validated_eigenvector = []
 
-        for vector in eigenvector:
+        for atom_index, vector in enumerate(
+            eigenvector
+        ):
             if not isinstance(
                 vector,
                 (list, tuple),
@@ -1110,6 +2313,19 @@ def validate_external_modes(modes, nat):
                 raise ValueError(
                     f"External mode {mode_index} contains "
                     "a non-finite vector."
+                )
+            if (
+                atom_index in excluded_atom_indices
+                and any(
+                    abs(value)
+                    > excluded_vector_tolerance
+                    for value in values
+                )
+            ):
+                raise ValueError(
+                    f"External mode {mode_index} contains "
+                    f"a non-zero vector for excluded atom "
+                    f"{atom_index}."
                 )
 
             validated_eigenvector.append(
@@ -1486,14 +2702,25 @@ def validate_options(parser, args, environ=None):
                 + str(err)
             )
 
+        ase_command_variables = (
+            'ASE_VASP_COMMAND',
+            'VASP_COMMAND',
+            'VASP_SCRIPT',
+        )
+
+        has_environment_command = any(
+            environ.get(variable_name)
+            for variable_name in ase_command_variables
+        )
+
         if (
             not direct_ase_settings.get('command')
-            and not environ.get('ASE_VASP_COMMAND')
+            and not has_environment_command
         ):
             parser.error(
                 "Direct ASE vibrations require either a "
-                "'command' entry in the settings JSON or "
-                "the ASE_VASP_COMMAND environment variable."
+                "'command' entry in the settings JSON or one of "
+                "ASE_VASP_COMMAND, VASP_COMMAND or VASP_SCRIPT."
             )
 
     conversion_only = bool(
@@ -1610,6 +2837,8 @@ def load_modes(
 ):
     """Load phonon modes from the selected or available source."""
     external_modes = None
+    expected_mode_count = None
+    vibrated_atom_indices = None
 
     if (
         options.phonopy_qpoints
@@ -1649,9 +2878,28 @@ def load_modes(
                 options.ase_modes,
                 'r',
             ) as external_fh:
-                external_modes = read_ase_modes(
-                    external_fh
+                (
+                    external_modes,
+                    ase_mode_metadata,
+                ) = read_ase_modes(
+                    external_fh,
+                    return_metadata=True,
                 )
+
+            expected_mode_count = (
+                validate_ase_mode_metadata(
+                    metadata=ase_mode_metadata,
+                    nat=nat,
+                    frozen=frozen,
+                )
+            )
+            if ase_mode_metadata is not None:
+                vibrated_atom_indices = [
+                    int(index)
+                    for index in ase_mode_metadata[
+                        'vibrated_atom_indices'
+                    ]
+                ]
 
         else:
             print(
@@ -1659,17 +2907,22 @@ def load_modes(
                 "ASE Vibrations.",
                 flush=True,
             )
-
             (
                 external_modes,
                 ase_mode_json_path,
                 ase_summary_path,
+                vibrated_atom_indices,
             ) = run_ase_vibrations(
                 structure_filename=options.phonon_poscar,
                 settings=direct_ase_settings,
                 workdir=options.ase_vibration_dir,
                 delta=options.ase_delta,
                 nfree=options.ase_nfree,
+            )
+            expected_mode_count = (
+                3 * len(
+                    vibrated_atom_indices
+                )
             )
 
             print(
@@ -1692,6 +2945,12 @@ def load_modes(
             validate_external_modes(
                 external_modes,
                 nat,
+                expected_mode_count=(
+                    expected_mode_count
+                ),
+                vibrated_atom_indices=(
+                    vibrated_atom_indices
+                ),
             )
         )
 

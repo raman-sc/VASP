@@ -139,8 +139,16 @@ The structure supplied with `--phonon-poscar` must have the same:
 
 as the external phonon calculation.
 
-For a structure containing `N` atoms, the external source must contain
-exactly `3N` modes.
+For a structure containing `N` atoms, Phonopy input, legacy ASE JSON
+input and the legacy `freq.dat` / `modes_sqrt_amu.dat` route normally
+contain `3N` modes.
+
+For Direct ASE and metadata-enabled ASE JSON input, fully fixed atoms
+may be excluded from the vibration calculation. In this case, the
+expected number of modes is `3M`, where `M` is the number of vibrated
+atoms. Each eigenvector must still contain one Cartesian row for every
+atom in the full structure. Rows belonging to excluded atoms must be
+zero within a numerical tolerance.
 
 Unless `--keep-mode-order` is used, modes from Phonopy or ASE are sorted
 from highest to lowest frequency.
@@ -201,6 +209,38 @@ It may be a list of modes:
 ```
 
 It may also be an object containing a `modes` list.
+Direct ASE output uses an object containing both `metadata` and
+`modes`:
+
+```json
+{
+  "metadata": {
+    "schema_version": 1,
+    "number_of_atoms": 2,
+    "vibrated_atom_indices": [1],
+    "expected_mode_count": 3,
+    "structure_sha256": "..."
+  },
+  "modes": [
+    {
+      "mode": 1,
+      "frequency_cm-1": 500.0,
+      "eigenvector": [
+        [0.0, 0.0, 0.0],
+        [0.1, 0.0, 0.0]
+      ]
+    }
+  ]
+}
+```
+
+When this format is loaded, the total atom count, vibrated atom
+indices and expected mode count are checked against the supplied
+POSCAR. Legacy JSON files containing only a mode list remain
+supported.
+
+The stored `structure_sha256` is currently a provenance record. It is
+not recomputed when an ASE JSON file is imported.
 
 Each eigenvector must contain one `x y z` row per atom.
 
@@ -231,8 +271,9 @@ This option requires:
 - a working VASP installation;
 - VASP pseudopotentials;
 - a JSON file containing the ASE VASP calculator settings;
-- either a `command` entry in that JSON file or the
-  `ASE_VASP_COMMAND` environment variable.
+- either a `command` entry in that JSON file or one of the
+  `ASE_VASP_COMMAND`, `VASP_COMMAND` or `VASP_SCRIPT` environment
+  variables.
 
 The reference structure is supplied using `--phonon-poscar`. The atom
 order in this file is retained throughout the vibration calculation.
@@ -258,10 +299,15 @@ An example settings file is:
 }
 ```
 
-The VASP command may be supplied through the environment:
+The VASP launch command may be supplied through one of the standard
+ASE environment variables:
 
 ```bash
 export ASE_VASP_COMMAND='mpirun -np 16 /path/to/vasp_gam'
+
+# The following ASE variables are also accepted:
+# export VASP_COMMAND='mpirun -np 16 /path/to/vasp_gam'
+# export VASP_SCRIPT='/path/to/vasp_wrapper.py'
 ```
 
 Alternatively, the settings JSON may contain:
@@ -301,6 +347,7 @@ finite-difference order is `nfree=2`. These may be changed using:
 The Direct ASE route writes:
 
 ```text
+ase_vibrations/ase_vibration_cache_manifest.json
 ase_vibrations/ase_gamma_modes.json
 ase_vibrations/ase_vibrations_summary.txt
 ase_vibrations/ase_vibration_run.json
@@ -310,17 +357,65 @@ raman_inputs/external_mode_order.csv
 ```
 
 ASE stores the force calculations in a vibration cache below the
-selected vibration directory. A later invocation using the same
-structure, displacement settings and vibration directory reuses all
-completed cache entries. Only missing displacements are calculated.
+selected vibration directory.
 
-A completed cache can therefore be used to resume an interrupted run.
-Users should not manually edit or remove individual cache files unless
-they intend to recalculate the corresponding displacement.
+Before a cache is reused, the workflow builds and checks a
+compatibility manifest containing:
+
+- the atomic numbers and Cartesian coordinates;
+- the simulation cell and periodic boundary conditions;
+- atomic masses, initial charges and magnetic moments;
+- atomic constraints;
+- ASE VASP calculator settings;
+- the displacement size;
+- the finite-difference order;
+- the explicitly selected movable atom indices.
+
+The VASP launch command is not treated as a scientific cache parameter,
+so it may be changed without invalidating otherwise identical force
+results.
+
+An existing cache is rejected if:
+
+- its compatibility manifest is missing;
+- its manifest does not match the requested calculation;
+- a cache file is empty;
+- a cache file contains malformed JSON;
+- a cache entry does not contain valid force data;
+- the force data are non-numeric, non-finite or do not have an `N x 3`
+  shape;
+- the force atom count does not match the structure.
+
+A compatible partial or complete cache may be resumed. Completed force
+calculations are reused and only missing displacements are calculated.
+Users should not manually edit individual cache files.
 
 The Direct ASE route generates the vibration modes only. The Raman
 activity calculation still uses VASP dielectric tensors as the
 back-end.
+
+### Fully fixed atoms
+
+Direct ASE identifies fully fixed atoms from ASE `FixAtoms`
+constraints and explicitly passes the remaining movable atom indices
+to `ASE Vibrations`. This makes the selected vibration atoms
+independent of ASE version-specific defaults.
+
+When fully fixed atoms are present:
+
+- the number of modes is three times the number of movable atoms;
+- each eigenvector still contains one Cartesian row for every atom in
+  the full structure;
+- rows belonging to excluded atoms must be zero within a numerical
+  tolerance;
+- the mode count, movable atom indices and eigenvector rows are checked
+  for consistency;
+- a structure in which every atom is fully fixed is rejected before
+  any force calculation begins.
+
+Only fully fixed atoms represented by `FixAtoms` have been explicitly
+validated. Partially constrained Cartesian directions require further
+testing.
 
 ### Generating displaced structures
 
@@ -418,24 +513,44 @@ python3 vasp_raman.py \
 
 ### Validation
 
-The external-mode route checks:
+The shared external-mode route checks:
 
-- the number of atoms;
-- the number of modes;
-- the number of atomic rows in each eigenvector;
-- the three-dimensional shape of each atomic vector;
-- zero-norm modes;
-- Phonopy Γ-point and atom-order consistency.
+- that the mode source contains a non-empty mode list;
+- the total number of atoms;
+- the expected number of modes;
+- the number of atomic rows in every eigenvector;
+- that every atomic vector contains three Cartesian components;
+- that frequencies and eigenvector components are numeric and finite;
+- that no mode has zero norm;
+- Phonopy top-level YAML structure;
+- the Phonopy Gamma-point position;
+- Phonopy atom symbols and ordering;
+- ASE JSON metadata consistency;
+- reduced mode counts for fully fixed atoms;
+- zero-vector rows for atoms excluded from the vibration calculation.
 
 The Direct ASE route also checks:
 
 - that `--ase-vasp-settings` is supplied;
-- that the settings file can be read;
+- that the settings file contains a JSON object;
+- that `IBRION=-1` and `NSW=0` are used;
 - that `--ase-delta` is positive;
 - that `--ase-nfree` is either `2` or `4`;
-- that a VASP command is available through the settings file or
-  `ASE_VASP_COMMAND`;
-- that only one external mode source is selected.
+- that a VASP launch command is available through the settings JSON,
+  `ASE_VASP_COMMAND`, `VASP_COMMAND` or `VASP_SCRIPT`;
+- that only one external mode source is selected;
+- that at least one atom is movable;
+- that the movable atom indices passed to ASE match the indices
+  returned by `ASE Vibrations`;
+- that the number of modes matches the number of movable atoms;
+- that excluded atoms have zero eigenvector rows;
+- that an existing cache has a compatibility manifest;
+- that the cache manifest matches the current structure, calculator
+  settings, displacement size, finite-difference order and movable
+  atom indices;
+- that cache JSON files are non-empty and readable;
+- that every cache entry contains finite force data with an `N x 3`
+  shape matching the structure.
 
 ### Bulk-Si benchmark
 
@@ -469,16 +584,80 @@ With `delta=0.01 Angstrom` and `nfree=2`:
 - `freq.dat`, `modes_sqrt_amu.dat` and
   `external_mode_order.csv` were identical between the first and
   restarted runs.
+The final protected restart used a settings file containing
+`command=false`. The run still completed successfully because every
+required displacement was already present in the compatible cache.
+This confirmed that no additional VASP force calculation was started.
+
+For the protected restart:
+
+- `cache_reused` was recorded as `true`;
+- the cache manifest remained unchanged;
+- all cache SHA256 hashes remained unchanged;
+- the generated frequency, eigenvector and mode-order files were
+  identical to those from the fresh calculation.
+
+The Direct ASE JSON output was also loaded again through `--ase-modes`.
+The round-trip reproduced identical `freq.dat`,
+`modes_sqrt_amu.dat` and `external_mode_order.csv` files.
+
+The final implementation was validated using ASE 3.29.0. The complete
+unit-test suite contained 47 tests, all of which passed.
 
 ### Known limitations
 
-- The Phonopy route currently supports real Γ-point eigenvectors.
+- The Phonopy route currently supports real Gamma-point eigenvectors.
   A mode is rejected if it remains complex after phase alignment.
+
+- Phonopy atom symbols and ordering are checked, but the lattice and
+  atomic coordinates stored in Phonopy metadata are not yet compared
+  automatically with the supplied POSCAR. The user must ensure that
+  both files describe the same structure.
+
+- The `structure_sha256` stored in metadata-enabled ASE JSON is
+  currently retained as a provenance record. It is not recomputed
+  from `--phonon-poscar` when the JSON file is imported.
+
+- ASE cache compatibility does not currently include hashes of the
+  selected VASP POTCAR contents. The same pseudopotential collection
+  and `VASP_PP_PATH` should therefore be used when resuming a cache.
+
+- Only one Direct ASE process should use a given vibration working
+  directory at a time. Concurrent runs sharing the same VASP
+  calculator directory have not been validated.
+
+- The cache compatibility layer supports the normal ASE
+  `cache.*.json` layout. Legacy pickle caches and combined ASE cache
+  layouts are not handled.
+
+- Existing Raman displacement files such as
+  `OUTCAR.0001.+1.out` are identified by mode number. A clean Raman
+  working directory should be used when changing the structure,
+  phonon source, mode ordering, eigenvectors or displacement settings.
+
+- Fully fixed atoms are supported through Direct ASE and
+  metadata-enabled ASE JSON. The legacy `freq.dat` and
+  `modes_sqrt_amu.dat` readers still assume a complete `3N` mode set.
+
+- Fully fixed `FixAtoms` constraints have been explicitly tested.
+  Partially constrained Cartesian directions require further
+  validation.
+
+- The CLI accepts a VASP launch command from the settings JSON or from
+  `ASE_VASP_COMMAND`, `VASP_COMMAND` or `VASP_SCRIPT` in the process
+  environment. A command stored only in an ASE configuration file is
+  not prevalidated by the CLI.
+
 - The ASE JSON input should use a documented convention for imaginary
   frequencies. If `frequency_cm-1` contains only the real part, an
-  imaginary mode may otherwise be written as `0.0 cm^-1`.
-- The external phonon calculation and `--phonon-poscar` structure must
-  use exactly the same atom ordering.
+  imaginary mode may otherwise be represented as `0.0 cm^-1`.
+
+- The external phonon calculation and the supplied POSCAR must use the
+  same atom ordering.
+
+These limitations do not affect the controlled bulk-Si and H2O
+validation runs reported above, but they should be considered before
+using the workflow for wider production calculations.
 
 ## Examples
 
@@ -506,9 +685,25 @@ With `delta=0.01 Angstrom` and `nfree=2`:
 * Refactored structure loading, mode loading, displaced-structure
   generation, dielectric extraction and Raman calculation into
   reusable functions.
-* Expanded the unit-test suite to 30 tests.
+* Expanded the unit-test suite to 47 tests.
 * Added real regressions for the original VASP, Phonopy, ASE JSON and
   Direct ASE routes.
+* Added Direct ASE cache compatibility manifests.
+* Added deterministic structure SHA256 and calculation metadata for
+  cache reuse.
+* Added rejection of missing, incompatible, empty and malformed ASE
+  cache entries.
+* Added validation of numeric, finite `N x 3` force arrays in ASE cache
+  files.
+* Added explicit movable-atom indices for Direct ASE calculations.
+* Added reduced mode-count support for fully fixed atoms.
+* Added zero-vector validation for atoms excluded from vibration
+  calculations.
+* Added ASE JSON metadata and fixed-atom JSON round-trip support.
+* Added support for `ASE_VASP_COMMAND`, `VASP_COMMAND` and
+  `VASP_SCRIPT`.
+* Added clear errors for empty and non-mapping Phonopy YAML input.
+* Validated the final Direct ASE implementation using ASE 3.29.0.
 
 #### [0.6.0](https://github.com/raman-sc/VASP/blob/0.6.0/vasp_raman.py)
 * ADDED: ability to use phonons obtained from the [vtst tools](http://theory.cm.utexas.edu/vtsttools/dymmat.html)
